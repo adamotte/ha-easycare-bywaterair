@@ -301,9 +301,28 @@ class EasyCareClient:
 
         data = await self._request("GET", API_HOST_EASYCARE, path)
 
-        # Mise en cache de l'ID MongoDB du BPC pour les commandes suivantes
-        if bpc.id:
-            self._bpc_module_id = bpc.id
+        # ── Log diagnostic — identification des champs ID disponibles ──────────
+        _LOGGER.warning(
+            "[DIAG moduleId] bpc.id=%r | status._id=%r | status.id=%r "
+            "| status.moduleId=%r | status keys=%s",
+            bpc.id,
+            data.get("_id"),
+            data.get("id"),
+            data.get("moduleId"),
+            sorted(data.keys()),
+        )
+        # ─────────────────────────────────────────────────────────────────────
+
+        # Mise en cache de l'ID MongoDB du BPC pour les commandes suivantes.
+        # On cherche dans cet ordre : Module.id → champ _id du status → champ id
+        candidate_id = (
+            (bpc.id or "").strip()
+            or str(data.get("_id") or "").strip()
+            or str(data.get("id") or "").strip()
+            or str(data.get("moduleId") or "").strip()
+        )
+        if candidate_id:
+            self._bpc_module_id = candidate_id
 
         pool_inputs = data.get("pool") or []
         inputs: list[BPCInput] = []
@@ -446,7 +465,7 @@ class EasyCareClient:
             raise ValueError(
                 f"Mode invalide : {mode!r} (attendu : {', '.join(FILTRATION_MODES)})"
             )
-        _LOGGER.debug("Changement mode filtration → %s", mode_upper)
+        _LOGGER.warning("[DIAG setStatusCommandToSend] payload=%s", {"mode": mode_upper, "moduleId": self._bpc_module_id or "<vide>"})
         payload: dict[str, Any] = {"mode": mode_upper}
         if self._bpc_module_id:
             payload["moduleId"] = self._bpc_module_id
