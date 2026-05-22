@@ -140,6 +140,7 @@ class EasyCareConfigFlow(ConfigFlow, domain=DOMAIN):
             data_schema=STEP_USER_DATA_SCHEMA,
             description_placeholders={
                 "authorize_url": authorize_url,
+                "authorize_url_raw": authorize_url,
             },
             errors=errors,
         )
@@ -177,6 +178,7 @@ class EasyCareConfigFlow(ConfigFlow, domain=DOMAIN):
             data_schema=STEP_REAUTH_DATA_SCHEMA,
             description_placeholders={
                 "authorize_url": authorize_url,
+                "authorize_url_raw": authorize_url,
             },
             errors=errors,
         )
@@ -272,18 +274,22 @@ class EasyCareConfigFlow(ConfigFlow, domain=DOMAIN):
     def _show_form(self, errors: dict[str, str]) -> ConfigFlowResult:
         """Ré-affiche le bon formulaire (setup ou reauth) avec les erreurs."""
         authorize_url = EasyCareAuth.build_authorize_url()
+        placeholders = {
+            "authorize_url": authorize_url,
+            "authorize_url_raw": authorize_url,
+        }
 
         if self._reauth_entry is not None:
             return self.async_show_form(
                 step_id="reauth_confirm",
                 data_schema=STEP_REAUTH_DATA_SCHEMA,
-                description_placeholders={"authorize_url": authorize_url},
+                description_placeholders=placeholders,
                 errors=errors,
             )
         return self.async_show_form(
             step_id="user",
             data_schema=STEP_USER_DATA_SCHEMA,
-            description_placeholders={"authorize_url": authorize_url},
+            description_placeholders=placeholders,
             errors=errors,
         )
 

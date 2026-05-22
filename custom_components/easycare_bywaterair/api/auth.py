@@ -179,6 +179,7 @@ class EasyCareAuth:
             "scope": OAUTH_SCOPES,
             "code_challenge": OAUTH_CODE_CHALLENGE,
             "code_challenge_method": "S256",
+            "response_mode": "query",
         }
         return f"{OAUTH_AUTHORIZE_URL}?{urlencode(params)}"
 
@@ -217,13 +218,40 @@ class EasyCareAuth:
             "redirect_uri": OAUTH_REDIRECT_URI,
         }
 
-        data = await self._post_token_endpoint(params)
+        try:
+            data = await self._post_token_endpoint(params)
+        except EasyCareApiError as err:
+            # Azure B2C retourne HTTP 400 pour les codes invalides ou expirés
+            _LOGGER.warning(
+                "Échange de code rejeté par Azure B2C — HTTP %s : %s",
+                err.status_code,
+                (err.body or "")[:300],
+            )
+            raise EasyCareInvalidCodeError(
+                f"Code rejeté par Azure B2C (HTTP {err.status_code})"
+            ) from err
+
+        # Azure B2C peut aussi retourner HTTP 200 avec un body d'erreur
+        # (comportement non-standard mais observé sur certains tenants B2C)
+        if "error" in data:
+            _LOGGER.warning(
+                "Erreur OAuth dans la réponse HTTP 200 : error=%s | description=%s",
+                data.get("error"),
+                data.get("error_description", "")[:200],
+            )
+            raise EasyCareInvalidCodeError(
+                f"Erreur Azure B2C: {data.get('error')}"
+            )
 
         try:
             tokens = OAuthTokens.from_api(data)
         except EasyCareInvalidResponseError as err:
-            # Si la réponse n'a pas de refresh_token, c'est que le scope
-            # `offline_access` est manquant ou que le code a déjà été utilisé.
+            # Réponse 200 mais sans les champs attendus — log les clés reçues
+            _LOGGER.warning(
+                "Réponse Azure B2C incomplète — champs reçus : %s | erreur : %s",
+                list(data.keys()),
+                err,
+            )
             raise EasyCareInvalidCodeError(
                 "La réponse OAuth ne contient pas de refresh_token — "
                 "vérifiez que le code est récent et n'a pas déjà été utilisé"
