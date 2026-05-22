@@ -164,14 +164,17 @@ class OAuthTokens:
         if now is None:
             now = datetime.now(tz=timezone.utc).timestamp()
 
-        expires_in = data.get("expires_in", 3600)
+        # Azure B2C peut omettre expires_in et n'utiliser que id_token_expires_in
+        expires_in = data.get("expires_in") or data.get("id_token_expires_in", 3600)
         try:
             expires_in = float(expires_in)
         except (TypeError, ValueError):
             expires_in = 3600.0
 
         return cls(
-            access_token=_require(data, "access_token", "OAuthTokens"),
+            # access_token est absent de certaines configurations Azure B2C
+            # (tenant Waterair inclus) — non utilisé par l'intégration, on tolère son absence
+            access_token=data.get("access_token", ""),
             id_token=_require(data, "id_token", "OAuthTokens"),
             refresh_token=_require(data, "refresh_token", "OAuthTokens"),
             expires_at=now + expires_in,
