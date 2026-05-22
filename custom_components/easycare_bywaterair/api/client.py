@@ -133,9 +133,12 @@ class EasyCareClient:
         # ID MongoDB de la piscine — renseigné après le premier get_user()
         # et transmis à get_pool_status via ?poolId=
         self._pool_db_id: str = ""
-        # ID MongoDB du module BPC — renseigné après le premier get_bpc_status()
-        # et injecté dans les payloads setStatusCommandToSend / reportManualCommandSent
+        # IDs MongoDB des modules — renseignés après le premier get_bpc_status()
+        # et injectés dans les payloads setStatusCommandToSend / reportManualCommandSent.
+        # On essaiera watbox.id en priorité (passerelle = candidat principal pour
+        # setStatusCommandToSend), puis bpc.id en fallback si watbox échoue.
         self._bpc_module_id: str = ""
+        self._watbox_module_id: str = ""
 
     # ════════════════════════════════════════════════════════════════════════
     # MÉTHODES PUBLIQUES — LECTURE
@@ -301,28 +304,31 @@ class EasyCareClient:
 
         data = await self._request("GET", API_HOST_EASYCARE, path)
 
-        # ── Log diagnostic — identification des champs ID disponibles ──────────
+        # Mise en cache des IDs pour les commandes.
+        # On essaie aussi l'ID du WATBOX (passerelle) car setStatusCommandToSend
+        # adresse peut-être le WATBOX plutôt que le BPC directement.
+        if watbox.id:
+            self._watbox_module_id = watbox.id
+        if bpc.id:
+            self._bpc_module_id = bpc.id
+
+        # ── Log diagnostic — dump des champs ID disponibles ───────────────────
+        # Clés potentiellement utiles dans les données brutes du module
+        bpc_extra_ids = {k: bpc.raw.get(k) for k in ("programId", "connectedModule", "gatewayId", "linkedModule") if bpc.raw.get(k)}
+        watbox_extra_ids = {k: watbox.raw.get(k) for k in ("programId", "connectedModule", "gatewayId", "linkedModule") if watbox.raw.get(k)}
         _LOGGER.warning(
-            "[DIAG moduleId] bpc.id=%r | status._id=%r | status.id=%r "
-            "| status.moduleId=%r | status keys=%s",
+            "[DIAG moduleId] watbox.id=%r | bpc.id=%r "
+            "| pool_db_id=%r "
+            "| bpc_extra=%s | watbox_extra=%s "
+            "| status keys=%s",
+            watbox.id,
             bpc.id,
-            data.get("_id"),
-            data.get("id"),
-            data.get("moduleId"),
+            self._pool_db_id,
+            bpc_extra_ids or "<none>",
+            watbox_extra_ids or "<none>",
             sorted(data.keys()),
         )
         # ─────────────────────────────────────────────────────────────────────
-
-        # Mise en cache de l'ID MongoDB du BPC pour les commandes suivantes.
-        # On cherche dans cet ordre : Module.id → champ _id du status → champ id
-        candidate_id = (
-            (bpc.id or "").strip()
-            or str(data.get("_id") or "").strip()
-            or str(data.get("id") or "").strip()
-            or str(data.get("moduleId") or "").strip()
-        )
-        if candidate_id:
-            self._bpc_module_id = candidate_id
 
         pool_inputs = data.get("pool") or []
         inputs: list[BPCInput] = []
@@ -465,10 +471,18 @@ class EasyCareClient:
             raise ValueError(
                 f"Mode invalide : {mode!r} (attendu : {', '.join(FILTRATION_MODES)})"
             )
-        _LOGGER.warning("[DIAG setStatusCommandToSend] payload=%s", {"mode": mode_upper, "moduleId": self._bpc_module_id or "<vide>"})
+        # WATBOX id en priorité (passerelle), BPC id en fallback, pool id en dernier recours
+        module_id_candidate = self._watbox_module_id or self._bpc_module_id or self._pool_db_id
+        _LOGGER.warning(
+            "[DIAG setStatusCommandToSend] watbox_id=%r | bpc_id=%r | pool_db_id=%r → utilise=%r",
+            self._watbox_module_id or "<vide>",
+            self._bpc_module_id or "<vide>",
+            self._pool_db_id or "<vide>",
+            module_id_candidate or "<vide>",
+        )
         payload: dict[str, Any] = {"mode": mode_upper}
-        if self._bpc_module_id:
-            payload["moduleId"] = self._bpc_module_id
+        if module_id_candidate:
+            payload["moduleId"] = module_id_candidate
         await self._request(
             "POST",
             API_HOST_EASYCARE,
@@ -486,9 +500,10 @@ class EasyCareClient:
                 f"(attendu : {', '.join(BOOST_MODES)})"
             )
         _LOGGER.debug("Démarrage boost %s", boost_upper)
+        module_id_candidate = self._watbox_module_id or self._bpc_module_id or self._pool_db_id
         payload: dict[str, Any] = {"mode": boost_upper}
-        if self._bpc_module_id:
-            payload["moduleId"] = self._bpc_module_id
+        if module_id_candidate:
+            payload["moduleId"] = module_id_candidate
         await self._request(
             "POST",
             API_HOST_EASYCARE,
@@ -500,9 +515,10 @@ class EasyCareClient:
     async def cancel_boost(self) -> bool:
         """Annule le boost de filtration en cours."""
         _LOGGER.debug("Annulation boost en cours")
+        module_id_candidate = self._watbox_module_id or self._bpc_module_id or self._pool_db_id
         payload: dict[str, Any] = {"mode": BOOST_CANCEL}
-        if self._bpc_module_id:
-            payload["moduleId"] = self._bpc_module_id
+        if module_id_candidate:
+            payload["moduleId"] = module_id_candidate
         await self._request(
             "POST",
             API_HOST_EASYCARE,
