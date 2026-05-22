@@ -22,7 +22,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, FILTRATION_MODES
+from .const import BOOST_CANCEL, BOOST_MODES, DOMAIN, FILTRATION_MODES
 from .coordinator import EasyCareBPCCoordinator, EasyCareCoordinators
 from .entity import EasyCareBPCEntity
 
@@ -34,11 +34,14 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Configure le select mode filtration si un BPC est présent."""
+    """Configure les selects si un BPC est présent."""
     coords: EasyCareCoordinators = hass.data[DOMAIN][entry.entry_id]
     if coords.modules.get_bpc() is None:
         return
-    async_add_entities([EasyCareFiltrationModeSelect(coords.bpc, entry)])
+    async_add_entities([
+        EasyCareFiltrationModeSelect(coords.bpc, entry),
+        EasyCareBoostSelect(coords.bpc, entry),
+    ])
 
 
 class EasyCareFiltrationModeSelect(
@@ -87,4 +90,61 @@ class EasyCareFiltrationModeSelect(
         await client.set_filtration_mode(option)
 
         # Refresh immédiat pour voir la prise en compte
+        await self.coordinator.async_request_immediate_refresh()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Select boost — démarre / annule / montre le boost en cours
+# ─────────────────────────────────────────────────────────────────────────────
+
+_BOOST_OFF = "off"
+_BOOST_OPTIONS = [_BOOST_OFF] + list(BOOST_MODES)  # off + 4h/12h/24h/36h/48h/72h
+
+
+class EasyCareBoostSelect(EasyCareBPCEntity[EasyCareBPCCoordinator], SelectEntity):
+    """Sélecteur de boost de filtration.
+
+    - Sélectionner une durée démarre le boost correspondant.
+    - Sélectionner « off » annule le boost en cours.
+    - L'état reflète le mode de boost actif (ou « off » si inactif).
+    - Le temps restant est disponible en attribut.
+    """
+
+    _attr_translation_key = "boost"
+    _attr_icon = "mdi:timer-play"
+    _attr_options = _BOOST_OPTIONS
+
+    def __init__(self, coordinator: EasyCareBPCCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry, unique_id_suffix="boost_select")
+
+    @property
+    def current_option(self) -> str | None:
+        """Mode boost actif, ou 'off' si inactif."""
+        if self.coordinator.data is None or self.coordinator.data.pool_status is None:
+            return _BOOST_OFF
+        ps = self.coordinator.data.pool_status
+        if ps.is_boosting and ps.mode in BOOST_MODES:
+            return ps.mode
+        return _BOOST_OFF
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Temps boost restant en attribut."""
+        if self.coordinator.data is None or self.coordinator.data.pool_status is None:
+            return {}
+        ps = self.coordinator.data.pool_status
+        return {"remaining": ps.boost_remaining_time}
+
+    async def async_select_option(self, option: str) -> None:
+        """Démarre un boost ou l'annule."""
+        coords: EasyCareCoordinators = self.hass.data[DOMAIN][self._entry.entry_id]
+        client = coords.user._client  # noqa: SLF001
+
+        if option == _BOOST_OFF:
+            _LOGGER.info("Annulation boost")
+            await client.cancel_boost()
+        else:
+            _LOGGER.info("Démarrage boost %s", option)
+            await client.start_boost(option)
+
         await self.coordinator.async_request_immediate_refresh()
