@@ -1,0 +1,106 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## What this is
+
+A Home Assistant custom integration for Waterair pool systems (Easy-care ecosystem: WATBOX + BPC + AC1 + LR-PR), developed by reverse-engineering the official Android APK. Not affiliated with Waterair.
+
+The integration lives entirely in `easycare_bywaterair/custom_components/easycare_bywaterair/`. There is no build system — development consists of copying this folder into a HA instance's `custom_components/` directory.
+
+## Development setup
+
+**Running locally in HA:**
+```
+cp -r easycare_bywaterair/custom_components/easycare_bywaterair /config/custom_components/
+# restart Home Assistant
+```
+
+**Enable debug logs in HA `configuration.yaml`:**
+```yaml
+logger:
+  default: warning
+  logs:
+    custom_components.easycare_bywaterair: debug
+```
+
+There are no automated tests or linters configured. HA integration validation can be run with `hassfest` from the `homeassistant` dev environment.
+
+## Architecture
+
+### Two API backends
+
+All constants (hosts, paths, credentials) are in `const.py`.
+
+- **`https://easycare.waterair.com`** — main Waterair backend: user/pool data, module list, BPC control (pump/lights)
+- **`https://apiwf.solem.fr`** — Solem backend: filtration mode, boost, runtime counters
+
+The Solem backend is optional — if it's unreachable, the BPC coordinator degrades gracefully (pool_status returns `None`).
+
+### Authentication chain (two-step)
+
+OAuth2 Azure B2C → EasyCare bearer. Both tokens are stored in `ConfigEntry.data` with their expiry timestamps and refreshed proactively before each API call (`auth.py`).
+
+Critical detail: **the Azure refresh_token rotates on every use** — the new value must be persisted back to ConfigEntry immediately via the callback passed to `EasyCareAuth`. If the refresh_token is ever lost, the user must re-authenticate via the config flow.
+
+The PKCE code_verifier/challenge and the OAuth client ID are fixed values extracted from the APK. The redirect URI (`msauth.com.waterair.easycare://auth`) is the mobile app's scheme, so the user must manually copy the auth code from the failed redirect URL.
+
+### Three coordinators with different cadences
+
+`coordinator.py` defines three `DataUpdateCoordinator` subclasses:
+
+| Coordinator | Interval | Data |
+|---|---|---|
+| `EasyCareUserCoordinator` | 30 min | pH, chlorine, temperature, alerts, treatment, owner |
+| `EasyCareModulesCoordinator` | 24 h | Module list (WATBOX, BPC, AC1, LR-PR) |
+| `EasyCareBPCCoordinator` | 1 min / 10 min (idle) | BPC inputs (pump/lights), pool status |
+
+The BPC coordinator has adaptive polling: when no BPC input is active, it skips real API calls and returns cached data, only forcing a live call every `SCAN_INTERVAL_BPC_IDLE_FACTOR` (10) cycles. This reduces load when the pump and lights are all off.
+
+### Entity/device hierarchy
+
+HA Device Registry structure:
+```
+WATBOX (passerelle)
+├── BPC (via_device=WATBOX) — pump switch, light entities, filtration select, boost buttons
+├── AC1 (via_device=WATBOX) — pH, chlorine, temperature, battery, treatment sensors
+└── LR-PR (via_device=WATBOX) — pressure sensor (only if module present)
+```
+
+Entities are only created if the corresponding module is present in the modules coordinator response. BPC light entities additionally require `numberOfInputs >= 1` (spot) or `>= 2` (escalight).
+
+### BPC manual commands require two API calls
+
+Sending a pump/light command (`switch.py`, `light.py`) always calls:
+1. `POST /api/module/{watbox}/manual/{bpc}` — send the command
+2. `POST /api/reportManualCommandSent` — confirm the command (mandatory second step, discovered from APK)
+
+Missing step 2 leaves the command un-acknowledged on the server side.
+
+### BPC input indices (from APK analysis)
+
+- Index 0 → pump (filtration)
+- Index 1 → spot (main light)
+- Index 2 → escalight (stair lights)
+
+### Data models
+
+All API responses are parsed into frozen dataclasses (`models.py`). Parsing helpers `_require()` and `_parse_timestamp()` enforce mandatory fields and handle both Unix epoch and ISO 8601 timestamps. Parsing failures raise `EasyCareInvalidResponseError`.
+
+### Exception hierarchy
+
+`exceptions.py` defines a hierarchy under `EasyCareError`. Coordinators map these to HA standard exceptions:
+- `EasyCareTokenExpiredError` / `EasyCareUnauthorizedError` → `ConfigEntryAuthFailed` (triggers reauth UI)
+- All other errors → `UpdateFailed` (HA retries later)
+
+## Key files
+
+| File | Purpose |
+|---|---|
+| `const.py` | All constants: API hosts/paths, OAuth credentials, polling intervals, module types, BPC indices |
+| `api/auth.py` | Token lifecycle: proactive refresh, rotation, concurrency lock |
+| `api/client.py` | All HTTP calls, retry logic, response parsing dispatch |
+| `api/models.py` | Frozen dataclasses for all API responses |
+| `coordinator.py` | Three coordinators including adaptive BPC polling logic |
+| `config_flow.py` | OAuth2 setup (user step + reauth flow) |
+| `__init__.py` | Integration setup, device registry, service registration |

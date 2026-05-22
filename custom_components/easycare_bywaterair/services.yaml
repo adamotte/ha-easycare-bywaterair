@@ -1,0 +1,88 @@
+# Déclaration des services Easy-care by Waterair
+# Format documenté : https://developers.home-assistant.io/docs/dev_101_services
+#
+# Ces définitions sont utilisées par HA pour générer automatiquement :
+#   - L'UI de l'éditeur de services (Outils de développement > Services)
+#   - L'auto-complétion dans les automations
+#   - La validation des paramètres
+
+pump_on:
+  name: "Démarrer la pompe de filtration"
+  description: >
+    Démarre la pompe de filtration en mode manuel pour une durée donnée.
+    Équivalent au bouton 'ON' dans l'application Waterair.
+  fields:
+    duration_minutes:
+      name: "Durée"
+      description: "Durée de fonctionnement en minutes (1 à 1440 = 24h)"
+      default: 60
+      example: 120
+      required: false
+      selector:
+        number:
+          min: 1
+          max: 1440
+          step: 1
+          unit_of_measurement: "min"
+          mode: box
+
+pump_off:
+  name: "Arrêter la pompe de filtration"
+  description: >
+    Arrête la pompe de filtration immédiatement.
+    Équivalent au bouton 'OFF' dans l'application Waterair.
+
+set_filtration_mode:
+  name: "Changer le mode de filtration"
+  description: >
+    Change le mode de filtration entre AUTO (automatique selon température),
+    CONTINUOUS (marche forcée), MANUAL (arrêt forcé) et PROG (programmation).
+  fields:
+    mode:
+      name: "Mode"
+      description: "Mode de filtration à activer"
+      required: true
+      example: "AUTO"
+      selector:
+        select:
+          options:
+            - label: "🔄 Automatique (selon température)"
+              value: "AUTO"
+            - label: "▶️ Marche forcée (ON)"
+              value: "CONTINUOUS"
+            - label: "⏹️ Arrêt forcé (OFF)"
+              value: "MANUAL"
+            - label: "📅 Programmation horaire"
+              value: "PROG"
+
+start_boost:
+  name: "Démarrer un boost de filtration"
+  description: >
+    Lance un boost de filtration pour 12 ou 24 heures.
+    Pratique après une baignade ou un traitement choc.
+  fields:
+    duration:
+      name: "Durée du boost"
+      description: "Durée du boost (12h ou 24h)"
+      required: true
+      example: "BOOST12H"
+      selector:
+        select:
+          options:
+            - label: "⚡ Boost 12h"
+              value: "BOOST12H"
+            - label: "⚡ Boost 24h"
+              value: "BOOST24H"
+
+cancel_boost:
+  name: "Annuler le boost en cours"
+  description: >
+    Annule immédiatement le boost de filtration en cours.
+    Sans effet si aucun boost n'est actif.
+
+refresh_data:
+  name: "Forcer un rafraîchissement"
+  description: >
+    Force un rafraîchissement immédiat de toutes les données depuis les
+    serveurs Waterair (modules, métriques, état pompe).
+    Utile après une commande manuelle ou pour debug.

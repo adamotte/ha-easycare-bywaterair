@@ -1,0 +1,15 @@
+{
+  "domain": "easycare_bywaterair",
+  "name": "Easy-care by Waterair",
+  "version": "0.1.0",
+  "config_flow": true,
+  "documentation": "https://github.com/YOUR_GITHUB/ha-easycare-bywaterair",
+  "issue_tracker": "https://github.com/YOUR_GITHUB/ha-easycare-bywaterair/issues",
+  "codeowners": [],
+  "integration_type": "hub",
+  "iot_class": "cloud_polling",
+  "dependencies": [],
+  "requirements": [
+    "aiohttp>=3.9.0"
+  ]
+}

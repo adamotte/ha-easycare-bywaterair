@@ -1,0 +1,149 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Easy-care by Waterair — Configuration",
+        "description": "1. Cliquez [ici]({authorize_url}) et connectez-vous avec votre compte Waterair.\n2. Après connexion, le navigateur affichera une erreur (redirection vers msauth://).\n3. **Copiez l'URL depuis la barre d'adresse** (ou juste la valeur après `code=`).\n4. Collez-la ci-dessous.",
+        "data": {
+          "auth_code": "Code d'autorisation (ou URL complète)",
+          "pool_id": "Numéro de piscine (si plusieurs)"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Easy-care — Ré-authentification requise",
+        "description": "Votre session a expiré.\n\n1. Cliquez [ici]({authorize_url}) pour vous reconnecter.\n2. Copiez l'URL ou le code comme précédemment.\n3. Collez-le ci-dessous.",
+        "data": {
+          "auth_code": "Nouveau code d'autorisation"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth_code": "Code d'autorisation invalide ou expiré. Recommencez avec un code récent.",
+      "cannot_connect": "Impossible de joindre les serveurs Waterair. Vérifiez votre connexion Internet.",
+      "timeout": "Le serveur Waterair met trop de temps à répondre. Réessayez.",
+      "invalid_pool_id": "Ce numéro de piscine n'existe pas sur votre compte.",
+      "unknown": "Erreur inattendue. Consultez les logs pour plus de détails."
+    },
+    "abort": {
+      "already_configured": "Cette piscine est déjà configurée.",
+      "reauth_successful": "Ré-authentification réussie."
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "connection": {
+        "name": "Connexion"
+      }
+    },
+    "button": {
+      "refresh": {
+        "name": "Rafraîchir les données"
+      },
+      "boost_12h": {
+        "name": "Boost 12h"
+      },
+      "boost_24h": {
+        "name": "Boost 24h"
+      },
+      "cancel_boost": {
+        "name": "Annuler le boost"
+      }
+    },
+    "light": {
+      "spot": {
+        "name": "Projecteur"
+      },
+      "escalight": {
+        "name": "Éclairage des marches"
+      }
+    },
+    "number": {
+      "spot_duration": {
+        "name": "Durée projecteur"
+      },
+      "escalight_duration": {
+        "name": "Durée éclairage marches"
+      }
+    },
+    "select": {
+      "filtration_mode": {
+        "name": "Mode de filtration",
+        "state": {
+          "AUTO": "Auto (selon température)",
+          "CONTINUOUS": "Marche forcée",
+          "MANUAL": "Arrêt forcé",
+          "PROG": "Programmation"
+        }
+      }
+    },
+    "sensor": {
+      "ph": {"name": "pH"},
+      "chlorine": {"name": "Chlore (Redox)"},
+      "temperature": {"name": "Température de l'eau"},
+      "pressure": {"name": "Pression filtration"},
+      "notification": {"name": "Dernière notification"},
+      "treatment": {"name": "Traitement actif"},
+      "battery_ac1": {"name": "Batterie AC1"},
+      "pump_state": {
+        "name": "État pompe",
+        "state": {"on": "Marche", "off": "Arrêt"}
+      },
+      "filtration_mode": {"name": "Mode de filtration"},
+      "pump_total_runtime": {"name": "Durée totale pompe"},
+      "pump_counter_date": {"name": "Date référence compteur"},
+      "pump_daily_runtime": {"name": "Durée pompe aujourd'hui"},
+      "boost_remaining": {"name": "Temps boost restant"},
+      "owner": {"name": "Propriétaire du compte"},
+      "detail": {"name": "Modèle de piscine"}
+    },
+    "switch": {
+      "pump": {
+        "name": "Pompe de filtration"
+      }
+    }
+  },
+  "services": {
+    "pump_on": {
+      "name": "Démarrer la pompe",
+      "description": "Démarre la pompe de filtration pour une durée donnée.",
+      "fields": {
+        "duration_minutes": {
+          "name": "Durée",
+          "description": "Durée en minutes (1 à 1440)."
+        }
+      }
+    },
+    "pump_off": {
+      "name": "Arrêter la pompe",
+      "description": "Arrête la pompe de filtration immédiatement."
+    },
+    "set_filtration_mode": {
+      "name": "Changer le mode de filtration",
+      "description": "Change le mode de filtration.",
+      "fields": {
+        "mode": {
+          "name": "Mode",
+          "description": "AUTO, CONTINUOUS, MANUAL ou PROG."
+        }
+      }
+    },
+    "start_boost": {
+      "name": "Démarrer un boost",
+      "description": "Lance un boost de filtration de 12h ou 24h.",
+      "fields": {
+        "duration": {
+          "name": "Durée",
+          "description": "BOOST12H ou BOOST24H."
+        }
+      }
+    },
+    "cancel_boost": {
+      "name": "Annuler le boost",
+      "description": "Annule le boost en cours."
+    },
+    "refresh_data": {
+      "name": "Rafraîchir les données",
+      "description": "Force un rafraîchissement depuis les serveurs Waterair."
+    }
+  }
+}

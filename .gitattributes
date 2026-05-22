@@ -1,0 +1,6 @@
+# Normalize line endings to LF in the repository (HA runs on Linux)
+* text=auto eol=lf
+*.py text eol=lf
+*.json text eol=lf
+*.yaml text eol=lf
+*.md text eol=lf

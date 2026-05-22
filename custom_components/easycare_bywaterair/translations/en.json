@@ -1,0 +1,149 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Easy-care by Waterair — Setup",
+        "description": "1. Click [here]({authorize_url}) and log in with your Waterair account.\n2. After login, the browser will fail to redirect (msauth:// scheme).\n3. **Copy the URL from the address bar** (or just the `code=` value).\n4. Paste it below.",
+        "data": {
+          "auth_code": "Authorization code (or full URL)",
+          "pool_id": "Pool number (if multiple pools)"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Easy-care — Re-authentication needed",
+        "description": "Your session has expired.\n\n1. Click [here]({authorize_url}) to log in again.\n2. Copy the URL/code as before.\n3. Paste it below.",
+        "data": {
+          "auth_code": "New authorization code"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth_code": "Invalid or expired authorization code. Please try again with a fresh code.",
+      "cannot_connect": "Cannot reach Waterair servers. Check your internet connection.",
+      "timeout": "The Waterair server took too long to respond. Try again.",
+      "invalid_pool_id": "This pool number does not exist on your account.",
+      "unknown": "Unexpected error. See logs for details."
+    },
+    "abort": {
+      "already_configured": "This pool is already configured.",
+      "reauth_successful": "Re-authentication successful."
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "connection": {
+        "name": "Connection"
+      }
+    },
+    "button": {
+      "refresh": {
+        "name": "Refresh data"
+      },
+      "boost_12h": {
+        "name": "Boost 12h"
+      },
+      "boost_24h": {
+        "name": "Boost 24h"
+      },
+      "cancel_boost": {
+        "name": "Cancel boost"
+      }
+    },
+    "light": {
+      "spot": {
+        "name": "Spotlight"
+      },
+      "escalight": {
+        "name": "Step lighting"
+      }
+    },
+    "number": {
+      "spot_duration": {
+        "name": "Spotlight duration"
+      },
+      "escalight_duration": {
+        "name": "Step lighting duration"
+      }
+    },
+    "select": {
+      "filtration_mode": {
+        "name": "Filtration mode",
+        "state": {
+          "AUTO": "Auto (by temperature)",
+          "CONTINUOUS": "On (continuous)",
+          "MANUAL": "Off (manual)",
+          "PROG": "Scheduled"
+        }
+      }
+    },
+    "sensor": {
+      "ph": {"name": "pH"},
+      "chlorine": {"name": "Chlorine (ORP)"},
+      "temperature": {"name": "Water temperature"},
+      "pressure": {"name": "Filtration pressure"},
+      "notification": {"name": "Last notification"},
+      "treatment": {"name": "Active treatment"},
+      "battery_ac1": {"name": "AC1 battery"},
+      "pump_state": {
+        "name": "Pump state",
+        "state": {"on": "On", "off": "Off"}
+      },
+      "filtration_mode": {"name": "Filtration mode"},
+      "pump_total_runtime": {"name": "Pump total runtime"},
+      "pump_counter_date": {"name": "Counter reference date"},
+      "pump_daily_runtime": {"name": "Pump runtime today"},
+      "boost_remaining": {"name": "Boost remaining"},
+      "owner": {"name": "Account owner"},
+      "detail": {"name": "Pool model"}
+    },
+    "switch": {
+      "pump": {
+        "name": "Filtration pump"
+      }
+    }
+  },
+  "services": {
+    "pump_on": {
+      "name": "Pump on",
+      "description": "Start the filtration pump for a given duration.",
+      "fields": {
+        "duration_minutes": {
+          "name": "Duration",
+          "description": "Runtime in minutes (1-1440)."
+        }
+      }
+    },
+    "pump_off": {
+      "name": "Pump off",
+      "description": "Stop the filtration pump immediately."
+    },
+    "set_filtration_mode": {
+      "name": "Set filtration mode",
+      "description": "Change the filtration mode.",
+      "fields": {
+        "mode": {
+          "name": "Mode",
+          "description": "AUTO, CONTINUOUS, MANUAL or PROG."
+        }
+      }
+    },
+    "start_boost": {
+      "name": "Start boost",
+      "description": "Start a 12h or 24h filtration boost.",
+      "fields": {
+        "duration": {
+          "name": "Duration",
+          "description": "BOOST12H or BOOST24H."
+        }
+      }
+    },
+    "cancel_boost": {
+      "name": "Cancel boost",
+      "description": "Cancel the current boost."
+    },
+    "refresh_data": {
+      "name": "Refresh data",
+      "description": "Force a refresh from Waterair servers."
+    }
+  }
+}

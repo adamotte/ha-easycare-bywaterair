@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+# Home Assistant (tests locaux)
+.storage/
+.homeassistant/
+config/
+*.db
+*.db-shm
+*.db-wal
+
+# Secrets & env
+.env
+.env.*
+secrets.yaml
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Release artifacts
+*.zip
+*.xapk
+*.apk
