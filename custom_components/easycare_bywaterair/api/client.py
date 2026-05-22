@@ -40,7 +40,6 @@ from aiohttp import ClientError
 
 from ..const import (
     API_HOST_EASYCARE,
-    API_HOST_SOLEM,
     API_PATH_BPC_MANUAL,
     API_PATH_BPC_STATUS,
     API_PATH_GET_POOL_STATUS,
@@ -307,23 +306,14 @@ class EasyCareClient:
     async def get_pool_status(self) -> PoolStatus:
         """Récupère l'état complet de la filtration (mode, boost, compteurs).
 
-        Endpoint : GET /api/getPoolStatus (host Solem)
-
-        ⚠️ Cet endpoint est appelé sur le host alternatif `apiwf.solem.fr`,
-        découvert dans l'APK. Il peut nécessiter un token différent ou
-        utiliser un mécanisme d'authentification différent — à valider
-        empiriquement lors des premiers tests réels.
+        Endpoint : GET /api/getPoolStatus
 
         Returns:
             PoolStatus avec mode, boost, compteurs (tous optionnels).
-
-        Raises:
-            EasyCareApiError: si l'endpoint Solem n'est pas accessible
-                avec le bearer EasyCare actuel.
         """
         data = await self._request(
             "GET",
-            API_HOST_SOLEM,
+            API_HOST_EASYCARE,
             API_PATH_GET_POOL_STATUS,
         )
         return PoolStatus.from_api(data)
@@ -427,88 +417,47 @@ class EasyCareClient:
     async def set_filtration_mode(self, mode: str) -> bool:
         """Change le mode de filtration de la pompe.
 
-        Endpoint : POST /api/setStatusCommandToSend (host Solem)
+        Endpoint : POST /api/setStatusCommandToSend
 
-        Modes valides :
-          - AUTO       : durée automatique selon la température
-          - CONTINUOUS : marche forcée (= 'ON' dans l'UI mobile)
-          - MANUAL     : arrêt forcé (= 'OFF' dans l'UI mobile)
-          - PROG       : programmation horaire de l'utilisateur
-
-        ⚠️ Le payload exact n'est pas confirmé dans le code source du plugin
-        existant ; il est déduit de l'APK. On envoie `{"mode": "XXX"}` et on
-        ajustera empiriquement si le serveur retourne 400.
-
-        Args:
-            mode: l'un de FILTRATION_MODES.
-
-        Returns:
-            True si la commande a été acceptée.
-
-        Raises:
-            ValueError: mode inconnu.
+        Modes valides : AUTO, CONTINUOUS, MANUAL, PROG.
         """
         mode_upper = mode.upper().strip()
         if mode_upper not in FILTRATION_MODES:
             raise ValueError(
                 f"Mode invalide : {mode!r} (attendu : {', '.join(FILTRATION_MODES)})"
             )
-
         _LOGGER.debug("Changement mode filtration → %s", mode_upper)
-
         await self._request(
             "POST",
-            API_HOST_SOLEM,
+            API_HOST_EASYCARE,
             API_PATH_SET_STATUS_COMMAND,
             json_payload={"mode": mode_upper},
         )
         return True
 
     async def start_boost(self, boost_mode: str) -> bool:
-        """Démarre un boost de filtration.
-
-        Modes boost confirmés dans l'APK :
-          - BOOST12H : boost 12 heures
-          - BOOST24H : boost 24 heures
-
-        ⚠️ Le mode BOOST générique (durée custom via boostDuration) n'est PAS
-        encore supporté car le format exact du payload est inconnu.
-
-        Args:
-            boost_mode: BOOST12H ou BOOST24H.
-
-        Returns:
-            True si accepté.
-
-        Raises:
-            ValueError: mode boost inconnu.
-        """
+        """Démarre un boost de filtration (BOOST12H ou BOOST24H)."""
         boost_upper = boost_mode.upper().strip()
         if boost_upper not in BOOST_MODES:
             raise ValueError(
                 f"Mode boost invalide : {boost_mode!r} "
                 f"(attendu : {', '.join(BOOST_MODES)})"
             )
-
         _LOGGER.debug("Démarrage boost %s", boost_upper)
-
         await self._request(
             "POST",
-            API_HOST_SOLEM,
+            API_HOST_EASYCARE,
             API_PATH_SET_STATUS_COMMAND,
             json_payload={"mode": boost_upper},
         )
         return True
 
     async def cancel_boost(self) -> bool:
-        """Annule le boost de filtration en cours.
-
-        Envoie le mode BOOT spécial CANCELCURRENTBOOST (confirmé dans l'APK).
-        """
+        """Annule le boost de filtration en cours."""
         _LOGGER.debug("Annulation boost en cours")
         await self._request(
             "POST",
-            API_HOST_SOLEM,
+            API_HOST_EASYCARE,
             API_PATH_SET_STATUS_COMMAND,
             json_payload={"mode": BOOST_CANCEL},
         )

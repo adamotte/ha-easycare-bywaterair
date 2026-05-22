@@ -73,21 +73,11 @@ API_PATH_BPC_MANUAL: Final = "/api/module/{watbox_serial}/manual/{bpc_name}"
 API_PATH_REPORT_MANUAL_SENT: Final = "/api/reportManualCommandSent"
 """Confirmation de l'envoi d'une commande manuelle (étape 2/2 obligatoire)."""
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Endpoints API — host Solem (utilisé par l'APK pour mode/boost/compteurs)
-# ─────────────────────────────────────────────────────────────────────────────
-
-API_HOST_SOLEM: Final = "https://apiwf.solem.fr"
-"""Host alternatif Solem — utilisé pour getPoolStatus et setStatusCommandToSend."""
-
 API_PATH_GET_POOL_STATUS: Final = "/api/getPoolStatus"
 """État complet de la piscine — mode filtration, boost, compteurs."""
 
 API_PATH_SET_STATUS_COMMAND: Final = "/api/setStatusCommandToSend"
 """Changement de mode de filtration (AUTO/CONTINUOUS/MANUAL/PROG/BOOST*)."""
-
-API_PATH_SET_MANUAL_COMMAND: Final = "/api/setManualCommandToSend"
-"""Commande manuelle XML wfbe (alternative à API_PATH_BPC_MANUAL)."""
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Authentification OAuth2 Azure B2C Waterair
