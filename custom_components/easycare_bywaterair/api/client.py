@@ -133,6 +133,9 @@ class EasyCareClient:
         # ID MongoDB de la piscine — renseigné après le premier get_user()
         # et transmis à get_pool_status via ?poolId=
         self._pool_db_id: str = ""
+        # ID MongoDB du module BPC — renseigné après le premier get_bpc_status()
+        # et injecté dans les payloads setStatusCommandToSend / reportManualCommandSent
+        self._bpc_module_id: str = ""
 
     # ════════════════════════════════════════════════════════════════════════
     # MÉTHODES PUBLIQUES — LECTURE
@@ -298,6 +301,10 @@ class EasyCareClient:
 
         data = await self._request("GET", API_HOST_EASYCARE, path)
 
+        # Mise en cache de l'ID MongoDB du BPC pour les commandes suivantes
+        if bpc.id:
+            self._bpc_module_id = bpc.id
+
         pool_inputs = data.get("pool") or []
         inputs: list[BPCInput] = []
         for raw_input in pool_inputs:
@@ -408,11 +415,14 @@ class EasyCareClient:
 
         # Étape 2 — confirmation obligatoire (sinon le serveur peut ignorer la commande)
         try:
+            report_payload: dict[str, Any] = {}
+            if bpc.id:
+                report_payload["moduleId"] = bpc.id
             await self._request(
                 "POST",
                 API_HOST_EASYCARE,
                 API_PATH_REPORT_MANUAL_SENT,
-                json_payload={},
+                json_payload=report_payload,
             )
         except Exception as err:  # noqa: BLE001 — étape 2 non-critique
             _LOGGER.warning(
@@ -437,11 +447,14 @@ class EasyCareClient:
                 f"Mode invalide : {mode!r} (attendu : {', '.join(FILTRATION_MODES)})"
             )
         _LOGGER.debug("Changement mode filtration → %s", mode_upper)
+        payload: dict[str, Any] = {"mode": mode_upper}
+        if self._bpc_module_id:
+            payload["moduleId"] = self._bpc_module_id
         await self._request(
             "POST",
             API_HOST_EASYCARE,
             API_PATH_SET_STATUS_COMMAND,
-            json_payload={"mode": mode_upper},
+            json_payload=payload,
         )
         return True
 
@@ -454,22 +467,28 @@ class EasyCareClient:
                 f"(attendu : {', '.join(BOOST_MODES)})"
             )
         _LOGGER.debug("Démarrage boost %s", boost_upper)
+        payload: dict[str, Any] = {"mode": boost_upper}
+        if self._bpc_module_id:
+            payload["moduleId"] = self._bpc_module_id
         await self._request(
             "POST",
             API_HOST_EASYCARE,
             API_PATH_SET_STATUS_COMMAND,
-            json_payload={"mode": boost_upper},
+            json_payload=payload,
         )
         return True
 
     async def cancel_boost(self) -> bool:
         """Annule le boost de filtration en cours."""
         _LOGGER.debug("Annulation boost en cours")
+        payload: dict[str, Any] = {"mode": BOOST_CANCEL}
+        if self._bpc_module_id:
+            payload["moduleId"] = self._bpc_module_id
         await self._request(
             "POST",
             API_HOST_EASYCARE,
             API_PATH_SET_STATUS_COMMAND,
-            json_payload={"mode": BOOST_CANCEL},
+            json_payload=payload,
         )
         return True
 
