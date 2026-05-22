@@ -293,6 +293,7 @@ class Pool:
     """Caractéristiques physiques de la piscine."""
 
     model: str
+    id: str = ""          # MongoDB ObjectId — requis par /api/getPoolStatus?poolId=
     volume: float = 0.0
     address: str = ""
     latitude: float = 0.0
@@ -310,6 +311,7 @@ class Pool:
 
         return cls(
             model=data.get("model", "Unknown"),
+            id=str(data.get("_id") or data.get("id") or ""),
             volume=_to_float(data.get("volume")),
             address=data.get("address", ""),
             latitude=_to_float(data.get("latitude")),
