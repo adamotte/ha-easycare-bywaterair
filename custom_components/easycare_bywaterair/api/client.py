@@ -299,10 +299,6 @@ class EasyCareClient:
         data = await self._request("GET", API_HOST_EASYCARE, path)
 
         pool_inputs = data.get("pool") or []
-        _LOGGER.warning(
-            "get_bpc_status — pool_items=%s",
-            pool_inputs,
-        )
         inputs: list[BPCInput] = []
         for raw_input in pool_inputs:
             try:

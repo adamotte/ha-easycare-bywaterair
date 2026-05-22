@@ -98,7 +98,8 @@ class EasyCareFiltrationModeSelect(
 # ─────────────────────────────────────────────────────────────────────────────
 
 _BOOST_OFF = "off"
-_BOOST_OPTIONS = [_BOOST_OFF] + list(BOOST_MODES)  # off + 4h/12h/24h/36h/48h/72h
+_BOOST_ACTIVE = "active"   # état lecture seule : boost en cours, durée indéterminée
+_BOOST_OPTIONS = [_BOOST_OFF, _BOOST_ACTIVE] + list(BOOST_MODES)
 
 
 class EasyCareBoostSelect(EasyCareBPCEntity[EasyCareBPCCoordinator], SelectEntity):
@@ -106,8 +107,9 @@ class EasyCareBoostSelect(EasyCareBPCEntity[EasyCareBPCCoordinator], SelectEntit
 
     - Sélectionner une durée démarre le boost correspondant.
     - Sélectionner « off » annule le boost en cours.
-    - L'état reflète le mode de boost actif (ou « off » si inactif).
-    - Le temps restant est disponible en attribut.
+    - Quand un boost tourne, l'état affiche « active » avec le temps restant
+      en attribut. L'API ne retourne pas la durée initiale du boost, seulement
+      le temps restant — on ne peut donc pas retrouver le mode d'origine.
     """
 
     _attr_translation_key = "boost"
@@ -119,28 +121,31 @@ class EasyCareBoostSelect(EasyCareBPCEntity[EasyCareBPCCoordinator], SelectEntit
 
     @property
     def current_option(self) -> str | None:
-        """Mode boost actif, ou 'off' si inactif."""
-        if self.coordinator.data is None or self.coordinator.data.pool_status is None:
+        """'active' si boost en cours, 'off' sinon."""
+        if self.coordinator.data is None:
             return _BOOST_OFF
-        ps = self.coordinator.data.pool_status
-        if ps.is_boosting and ps.mode in BOOST_MODES:
-            return ps.mode
+        pump = self.coordinator.data.get_input(0)
+        if pump is not None and pump.is_boosting:
+            return _BOOST_ACTIVE
         return _BOOST_OFF
 
     @property
     def extra_state_attributes(self) -> dict:
         """Temps boost restant en attribut."""
-        if self.coordinator.data is None or self.coordinator.data.pool_status is None:
-            return {}
-        ps = self.coordinator.data.pool_status
-        return {"remaining": ps.boost_remaining_time}
+        if self.coordinator.data is None:
+            return {"remaining": "00:00"}
+        pump = self.coordinator.data.get_input(0)
+        if pump is not None and pump.is_boosting:
+            return {"remaining": pump.remaining_time}
+        return {"remaining": "00:00"}
 
     async def async_select_option(self, option: str) -> None:
         """Démarre un boost ou l'annule."""
         coords: EasyCareCoordinators = self.hass.data[DOMAIN][self._entry.entry_id]
         client = coords.user._client  # noqa: SLF001
 
-        if option == _BOOST_OFF:
+        if option in (_BOOST_OFF, _BOOST_ACTIVE):
+            # 'off' annule le boost ; 'active' est un état lecture seule → cancel aussi
             _LOGGER.info("Annulation boost")
             await client.cancel_boost()
         else:
