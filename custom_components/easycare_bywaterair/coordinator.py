@@ -375,22 +375,14 @@ class EasyCareBPCCoordinator(DataUpdateCoordinator[BPCData]):
             raise _wrap_api_error(err, "get_bpc_status") from err
 
         # Appel secondaire : pool_status (mode filtration, boost, compteurs)
-        # On le rend tolérant : si Solem est down, on garde quand même les
-        # données BPC qui sont l'essentiel pour le pilotage.
+        # get_pool_status est une feature secondaire — toute erreur dégrade
+        # gracieusement sans bloquer le BPC (pompe + lumières).
         pool_status: PoolStatus | None = None
         try:
             pool_status = await self._client.get_pool_status()
-        except (
-            EasyCareTokenExpiredError,
-            EasyCareUnauthorizedError,
-        ) as err:
-            # Erreur d'auth → on propage (les coordinators n'ont pas le droit
-            # de masquer ces erreurs au reauth_flow)
-            raise _wrap_api_error(err, "get_pool_status") from err
         except EasyCareError as err:
-            # Toute autre erreur Solem → on log et on continue sans pool_status
             _LOGGER.warning(
-                "get_pool_status indisponible (Solem) — fonctionnement dégradé : %s",
+                "get_pool_status indisponible — fonctionnement dégradé : %s",
                 err,
             )
 
