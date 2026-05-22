@@ -285,10 +285,10 @@ class EasyCareClient:
         self._validate_module_type(watbox, MODULE_TYPE_WATBOX, "watbox")
         self._validate_module_type(bpc, MODULE_TYPE_BPC, "bpc")
 
-        _LOGGER.debug(
-            "get_bpc_status — watbox name=%s serial=%s id=%s | bpc name=%s serial=%s id=%s",
-            watbox.name, watbox.serial_number, watbox.id,
-            bpc.name, bpc.serial_number, bpc.id,
+        _LOGGER.warning(
+            "get_bpc_status — WATBOX raw keys: %s | BPC raw keys: %s",
+            {k: v for k, v in watbox.raw.items() if not isinstance(v, (dict, list))},
+            {k: v for k, v in bpc.raw.items() if not isinstance(v, (dict, list))},
         )
 
         path = API_PATH_BPC_STATUS.format(
