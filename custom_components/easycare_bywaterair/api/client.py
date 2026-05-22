@@ -292,7 +292,7 @@ class EasyCareClient:
         )
 
         path = API_PATH_BPC_STATUS.format(
-            watbox_serial=watbox.name,
+            watbox_serial=watbox.serial_number,
             bpc_name=bpc.name,
         )
 
@@ -395,7 +395,7 @@ class EasyCareClient:
         }
 
         path = API_PATH_BPC_MANUAL.format(
-            watbox_serial=watbox.name,
+            watbox_serial=watbox.serial_number,
             bpc_name=bpc.name,
         )
 
