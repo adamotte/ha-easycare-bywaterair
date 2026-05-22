@@ -36,14 +36,7 @@
       }
     },
     "button": {
-      "refresh": {"name": "Rafraîchir les données"},
-      "boost_4h": {"name": "Boost 4h"},
-      "boost_12h": {"name": "Boost 12h"},
-      "boost_24h": {"name": "Boost 24h"},
-      "boost_36h": {"name": "Boost 36h"},
-      "boost_48h": {"name": "Boost 48h"},
-      "boost_72h": {"name": "Boost 72h"},
-      "cancel_boost": {"name": "Annuler le boost"}
+      "refresh": {"name": "Rafraîchir les données"}
     },
     "light": {
       "spot": {
@@ -69,6 +62,18 @@
           "CONTINUOUS": "Marche forcée",
           "MANUAL": "Arrêt forcé",
           "PROG": "Programmation"
+        }
+      },
+      "boost": {
+        "name": "Boost filtration",
+        "state": {
+          "off": "Inactif",
+          "BOOST4H": "4 heures",
+          "BOOST12H": "12 heures",
+          "BOOST24H": "24 heures",
+          "BOOST36H": "36 heures",
+          "BOOST48H": "48 heures",
+          "BOOST72H": "72 heures"
         }
       }
     },
