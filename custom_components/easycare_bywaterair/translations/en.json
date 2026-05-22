@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Easy-care by Waterair — Setup",
-        "description": "1. Click [here]({authorize_url}) and log in with your Waterair account.\n2. After login, the browser will fail to redirect (msauth:// scheme).\n3. **Copy the URL from the address bar** (or just the `code=` value).\n4. Paste it below.",
+        "description": "**Step 1 — Authorize**\n\nClick **[here]({authorize_url})** to log in with your Waterair account.\n\nIf the link does not open, copy and paste this URL into your browser:\n`{authorize_url_raw}`\n\n**Step 2 — Copy the code**\n\nAfter login, the browser will show an error (msauth:// redirect — this is normal). **Copy the full URL** from the address bar, then paste it below.\n\n> Tip: on mobile or if the address bar is hidden, use your browser's developer tools (F12 → Network) to find the redirect URL.",
         "data": {
           "auth_code": "Authorization code (or full URL)",
           "pool_id": "Pool number (if multiple pools)"
@@ -11,7 +11,7 @@
       },
       "reauth_confirm": {
         "title": "Easy-care — Re-authentication needed",
-        "description": "Your session has expired.\n\n1. Click [here]({authorize_url}) to log in again.\n2. Copy the URL/code as before.\n3. Paste it below.",
+        "description": "Your session has expired.\n\nClick **[here]({authorize_url})** to log in again, or copy this URL into your browser:\n`{authorize_url_raw}`\n\nAfter login, copy the redirect URL (msauth://...) from the address bar and paste it below.",
         "data": {
           "auth_code": "New authorization code"
         }
