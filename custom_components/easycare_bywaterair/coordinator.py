@@ -388,6 +388,12 @@ class EasyCareBPCCoordinator(DataUpdateCoordinator[BPCData]):
 
         self._last_real_update = datetime.now(tz=timezone.utc)
 
+        if pool_status is not None:
+            _LOGGER.warning(
+                "pool_status raw: %s",
+                {k: v for k, v in pool_status.raw.items() if not isinstance(v, (dict, list))},
+            )
+
         _LOGGER.debug(
             "BPC update OK : %d voie(s), active=%s, pool_status=%s",
             len(inputs),

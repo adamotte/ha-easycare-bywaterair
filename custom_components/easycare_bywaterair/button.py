@@ -22,8 +22,12 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
     BOOST_CANCEL,
+    BOOST_MODE_4H,
     BOOST_MODE_12H,
     BOOST_MODE_24H,
+    BOOST_MODE_36H,
+    BOOST_MODE_48H,
+    BOOST_MODE_72H,
     DOMAIN,
 )
 from .coordinator import (
@@ -51,8 +55,12 @@ async def async_setup_entry(
     # Boutons boost uniquement si BPC présent
     if coords.modules.get_bpc() is not None:
         buttons.extend([
+            EasyCareBoost4hButton(coords.bpc, entry),
             EasyCareBoost12hButton(coords.bpc, entry),
             EasyCareBoost24hButton(coords.bpc, entry),
+            EasyCareBoost36hButton(coords.bpc, entry),
+            EasyCareBoost48hButton(coords.bpc, entry),
+            EasyCareBoost72hButton(coords.bpc, entry),
             EasyCareCancelBoostButton(coords.bpc, entry),
         ])
 
@@ -118,11 +126,18 @@ class _BoostButtonBase(EasyCareBPCEntity[EasyCareBPCCoordinator], ButtonEntity):
         await self.coordinator.async_request_immediate_refresh()
 
 
-class EasyCareBoost12hButton(_BoostButtonBase):
-    """Démarre un boost de filtration de 12 heures."""
+class EasyCareBoost4hButton(_BoostButtonBase):
+    _attr_translation_key = "boost_4h"
+    _attr_icon = "mdi:timer-outline"
+    _boost_mode = BOOST_MODE_4H
 
+    def __init__(self, coordinator: EasyCareBPCCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry, unique_id_suffix="boost_4h")
+
+
+class EasyCareBoost12hButton(_BoostButtonBase):
     _attr_translation_key = "boost_12h"
-    _attr_icon = "mdi:timer-12-outline"
+    _attr_icon = "mdi:timer-outline"
     _boost_mode = BOOST_MODE_12H
 
     def __init__(self, coordinator: EasyCareBPCCoordinator, entry: ConfigEntry) -> None:
@@ -130,19 +145,42 @@ class EasyCareBoost12hButton(_BoostButtonBase):
 
 
 class EasyCareBoost24hButton(_BoostButtonBase):
-    """Démarre un boost de filtration de 24 heures."""
-
     _attr_translation_key = "boost_24h"
-    _attr_icon = "mdi:timer-sand"
+    _attr_icon = "mdi:timer-outline"
     _boost_mode = BOOST_MODE_24H
 
     def __init__(self, coordinator: EasyCareBPCCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator, entry, unique_id_suffix="boost_24h")
 
 
-class EasyCareCancelBoostButton(_BoostButtonBase):
-    """Annule le boost en cours."""
+class EasyCareBoost36hButton(_BoostButtonBase):
+    _attr_translation_key = "boost_36h"
+    _attr_icon = "mdi:timer-outline"
+    _boost_mode = BOOST_MODE_36H
 
+    def __init__(self, coordinator: EasyCareBPCCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry, unique_id_suffix="boost_36h")
+
+
+class EasyCareBoost48hButton(_BoostButtonBase):
+    _attr_translation_key = "boost_48h"
+    _attr_icon = "mdi:timer-outline"
+    _boost_mode = BOOST_MODE_48H
+
+    def __init__(self, coordinator: EasyCareBPCCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry, unique_id_suffix="boost_48h")
+
+
+class EasyCareBoost72hButton(_BoostButtonBase):
+    _attr_translation_key = "boost_72h"
+    _attr_icon = "mdi:timer-outline"
+    _boost_mode = BOOST_MODE_72H
+
+    def __init__(self, coordinator: EasyCareBPCCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry, unique_id_suffix="boost_72h")
+
+
+class EasyCareCancelBoostButton(_BoostButtonBase):
     _attr_translation_key = "cancel_boost"
     _attr_icon = "mdi:timer-off"
     _boost_mode = BOOST_CANCEL
