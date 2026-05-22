@@ -28,14 +28,13 @@ There are no automated tests or linters configured. HA integration validation ca
 
 ## Architecture
 
-### Two API backends
+### Single API backend
 
 All constants (hosts, paths, credentials) are in `const.py`.
 
-- **`https://easycare.waterair.com`** — main Waterair backend: user/pool data, module list, BPC control (pump/lights)
-- **`https://apiwf.solem.fr`** — Solem backend: filtration mode, boost, runtime counters
+- **`https://easycare.waterair.com`** — sole Waterair backend: user/pool data, module list, BPC control (pump/lights), filtration mode, boost commands.
 
-The Solem backend is optional — if it's unreachable, the BPC coordinator degrades gracefully (pool_status returns `None`).
+The Solem backend (`apiwf.solem.fr`) was removed after analysis confirmed all filtration state is readable from the BPC status endpoint (`/api/module/{watbox}/status/{bpc}`) via the `pool` array items.
 
 ### Authentication chain (two-step)
 
@@ -53,7 +52,7 @@ The PKCE code_verifier/challenge and the OAuth client ID are fixed values extrac
 |---|---|---|
 | `EasyCareUserCoordinator` | 30 min | pH, chlorine, temperature, alerts, treatment, owner |
 | `EasyCareModulesCoordinator` | 24 h | Module list (WATBOX, BPC, AC1, LR-PR) |
-| `EasyCareBPCCoordinator` | 1 min / 10 min (idle) | BPC inputs (pump/lights), pool status |
+| `EasyCareBPCCoordinator` | 1 min / 10 min (idle) | BPC pool inputs (pump/lights), derived filtration state |
 
 The BPC coordinator has adaptive polling: when no BPC input is active, it skips real API calls and returns cached data, only forcing a live call every `SCAN_INTERVAL_BPC_IDLE_FACTOR` (10) cycles. This reduces load when the pump and lights are all off.
 
@@ -73,9 +72,13 @@ Entities are only created if the corresponding module is present in the modules 
 
 Sending a pump/light command (`switch.py`, `light.py`) always calls:
 1. `POST /api/module/{watbox}/manual/{bpc}` — send the command
-2. `POST /api/reportManualCommandSent` — confirm the command (mandatory second step, discovered from APK)
+2. `POST /api/reportManualCommandSent` with `{"moduleId": bpc.id}` — confirm the command (mandatory second step, discovered from APK)
 
 Missing step 2 leaves the command un-acknowledged on the server side.
+
+### Filtration mode / boost commands require moduleId
+
+`POST /api/setStatusCommandToSend` requires `{"mode": "...", "moduleId": bpc.id}`. The BPC MongoDB ObjectId (`bpc.id`) is cached in `EasyCareClient._bpc_module_id` after the first `get_bpc_status()` call and injected automatically into all command payloads.
 
 ### BPC input indices (from APK analysis)
 
