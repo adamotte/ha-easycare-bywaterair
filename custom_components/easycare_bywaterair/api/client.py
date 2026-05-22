@@ -299,9 +299,11 @@ class EasyCareClient:
         data = await self._request("GET", API_HOST_EASYCARE, path)
 
         _LOGGER.warning(
-            "get_bpc_status — réponse complète clés=%s | hors-pool=%s",
-            list(data.keys()),
-            {k: v for k, v in data.items() if k != "pool" and not isinstance(v, (dict, list))},
+            "get_bpc_status — scalaires=%s | sensorState=%s | inputsAlerts=%s | radio=%s",
+            {k: v for k, v in data.items() if not isinstance(v, (dict, list))},
+            data.get("sensorState"),
+            data.get("inputsAlerts"),
+            data.get("radio"),
         )
 
         pool_inputs = data.get("pool") or []
