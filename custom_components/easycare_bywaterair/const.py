@@ -241,20 +241,25 @@ FILTRATION_MODES: Final = (MODE_AUTO, MODE_CONTINUOUS, MODE_MANUAL, MODE_PROG)
 """Tous les modes principaux exposés via le select HA."""
 
 # Modes Boost (durées prédéfinies)
-BOOST_MODE: Final = "BOOST"
-"""Boost avec durée custom (nécessite boostDuration en heures)."""
-
+BOOST_MODE_4H: Final = "BOOST4H"
 BOOST_MODE_12H: Final = "BOOST12H"
-"""Boost 12 heures."""
-
 BOOST_MODE_24H: Final = "BOOST24H"
-"""Boost 24 heures."""
+BOOST_MODE_36H: Final = "BOOST36H"
+BOOST_MODE_48H: Final = "BOOST48H"
+BOOST_MODE_72H: Final = "BOOST72H"
 
 BOOST_CANCEL: Final = "CANCELCURRENTBOOST"
 """Annulation du boost en cours."""
 
-BOOST_MODES: Final = (BOOST_MODE_12H, BOOST_MODE_24H)
-"""Modes boost exposés comme boutons HA."""
+BOOST_MODES: Final = (
+    BOOST_MODE_4H,
+    BOOST_MODE_12H,
+    BOOST_MODE_24H,
+    BOOST_MODE_36H,
+    BOOST_MODE_48H,
+    BOOST_MODE_72H,
+)
+"""Tous les modes boost exposés comme boutons HA."""
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Identifiants de devices pour le Device Registry HA
