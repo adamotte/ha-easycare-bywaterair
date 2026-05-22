@@ -424,6 +424,19 @@ class EasyCareBPCCoordinator(DataUpdateCoordinator[BPCData]):
         # `pool` de la réponse BPC.
         pool_status = _pool_status_from_inputs(inputs)
 
+        # ── Log diagnostic : champs bruts de la pompe pour valider le mapping origin ──
+        pump = next((i for i in inputs if i.index == 0), None)
+        if pump is not None:
+            _LOGGER.warning(
+                "[DIAG pompe] value=%s | origin=%s | info=%s | time=%s | mode_dérivé=%s",
+                pump.value,
+                pump.origin,
+                list(pump.info),
+                pump.remaining_time,
+                pool_status.mode if pool_status else None,
+            )
+        # ─────────────────────────────────────────────────────────────────────
+
         _LOGGER.debug(
             "BPC update OK : %d voie(s), active=%s, boost=%s",
             len(inputs),
