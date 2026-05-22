@@ -36,18 +36,14 @@
       }
     },
     "button": {
-      "refresh": {
-        "name": "Rafraîchir les données"
-      },
-      "boost_12h": {
-        "name": "Boost 12h"
-      },
-      "boost_24h": {
-        "name": "Boost 24h"
-      },
-      "cancel_boost": {
-        "name": "Annuler le boost"
-      }
+      "refresh": {"name": "Rafraîchir les données"},
+      "boost_4h": {"name": "Boost 4h"},
+      "boost_12h": {"name": "Boost 12h"},
+      "boost_24h": {"name": "Boost 24h"},
+      "boost_36h": {"name": "Boost 36h"},
+      "boost_48h": {"name": "Boost 48h"},
+      "boost_72h": {"name": "Boost 72h"},
+      "cancel_boost": {"name": "Annuler le boost"}
     },
     "light": {
       "spot": {

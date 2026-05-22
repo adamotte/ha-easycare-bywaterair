@@ -130,6 +130,9 @@ class EasyCareClient:
         self._session = session
         self._auth = auth
         self._pool_id = pool_id
+        # ID MongoDB de la piscine — renseigné après le premier get_user()
+        # et transmis à get_pool_status via ?poolId=
+        self._pool_db_id: str = ""
 
     # ════════════════════════════════════════════════════════════════════════
     # MÉTHODES PUBLIQUES — LECTURE
@@ -179,6 +182,10 @@ class EasyCareClient:
         metrics = Metrics.from_api(pool_data)
         alerts = Alerts.from_api(pool_data)
         treatment = Treatment.from_api(pool_data)
+
+        # Mise en cache de l'ID MongoDB pour get_pool_status
+        if pool.id:
+            self._pool_db_id = pool.id
 
         return client, pool, metrics, alerts, treatment
 
@@ -306,15 +313,18 @@ class EasyCareClient:
     async def get_pool_status(self) -> PoolStatus:
         """Récupère l'état complet de la filtration (mode, boost, compteurs).
 
-        Endpoint : GET /api/getPoolStatus
+        Endpoint : GET /api/getPoolStatus?poolId={id}
 
         Returns:
             PoolStatus avec mode, boost, compteurs (tous optionnels).
         """
+        path = API_PATH_GET_POOL_STATUS
+        if self._pool_db_id:
+            path = f"{path}?poolId={self._pool_db_id}"
         data = await self._request(
             "GET",
             API_HOST_EASYCARE,
-            API_PATH_GET_POOL_STATUS,
+            path,
         )
         return PoolStatus.from_api(data)
 
