@@ -300,9 +300,9 @@ SERVICE_REFRESH_DATA: Final = "refresh_data"
 # User-Agent — on imite l'app mobile pour éviter d'éventuels blocages serveur
 # ─────────────────────────────────────────────────────────────────────────────
 
-USER_AGENT: Final = "connected-pool-waterair/2.10.4 (HomeAssistant)"
-"""User-Agent envoyé dans toutes les requêtes. Imite l'app officielle v2.10.4
-avec une marque 'HomeAssistant' pour transparence."""
+USER_AGENT: Final = "connected-pool-waterair/2.4.6 (iPad; iOS 16.3; Scale/2.00)"
+"""User-Agent envoyé dans toutes les requêtes. Identique à l'app officielle iOS
+(valeur extraite du plugin yyrkoon94 / APK)."""
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Timeouts réseau (en secondes)

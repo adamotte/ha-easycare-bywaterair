@@ -286,8 +286,8 @@ class EasyCareClient:
         self._validate_module_type(bpc, MODULE_TYPE_BPC, "bpc")
 
         path = API_PATH_BPC_STATUS.format(
-            watbox_serial=watbox.id,
-            bpc_name=bpc.name,
+            watbox_serial=watbox.serial_number,
+            bpc_name=bpc.short_name,
         )
 
         data = await self._request("GET", API_HOST_EASYCARE, path)
@@ -389,8 +389,8 @@ class EasyCareClient:
         }
 
         path = API_PATH_BPC_MANUAL.format(
-            watbox_serial=watbox.id,
-            bpc_name=bpc.name,
+            watbox_serial=watbox.serial_number,
+            bpc_name=bpc.short_name,
         )
 
         _LOGGER.debug(
@@ -557,7 +557,7 @@ class EasyCareClient:
         headers = {
             "Authorization": f"Bearer {bearer}",
             "User-Agent": USER_AGENT,
-            "Accept": "application/json",
+            "accept": "version=2.5",
         }
         if json_payload is not None:
             headers["Content-Type"] = "application/json"
