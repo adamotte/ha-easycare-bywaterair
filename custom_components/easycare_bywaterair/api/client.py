@@ -201,8 +201,37 @@ class EasyCareClient:
             API_PATH_GET_USER_MODULES,
         )
 
-        pools = data.get("pools") or []
+        _LOGGER.debug(
+            "getUserWithHisModules — clés racine : %s", list(data.keys())
+        )
+
+        # L'API peut retourner les pools sous différentes clés selon la version
+        pools = (
+            data.get("pools")
+            or data.get("poolsWithModules")
+            or (data.get("user") or {}).get("pools")
+            or []
+        )
+
+        # Cas où les modules sont directement à la racine (pas de nesting pools)
+        if not pools and "modules" in data:
+            _LOGGER.debug(
+                "getUserWithHisModules — modules à la racine (pas de pools)"
+            )
+            modules_raw = data.get("modules") or []
+            modules: list[Module] = []
+            for m in modules_raw:
+                try:
+                    modules.append(Module.from_api(m))
+                except EasyCareInvalidResponseError as err:
+                    _LOGGER.warning("Module ignoré (données invalides) : %s", err)
+            return tuple(modules)
+
         if not pools:
+            _LOGGER.warning(
+                "getUserWithHisModules — structure inattendue, clés reçues : %s",
+                list(data.keys()),
+            )
             raise EasyCareInvalidResponseError(
                 "Aucune piscine trouvée sur le compte (getUserWithHisModules)"
             )
@@ -214,7 +243,14 @@ class EasyCareClient:
             )
 
         pool_data = pools[idx]
-        modules_raw = pool_data.get("modules") or []
+        _LOGGER.debug(
+            "getUserWithHisModules — clés pool[%d] : %s", idx, list(pool_data.keys())
+        )
+        modules_raw = (
+            pool_data.get("modules")
+            or pool_data.get("modulesList")
+            or []
+        )
 
         modules: list[Module] = []
         for m in modules_raw:
