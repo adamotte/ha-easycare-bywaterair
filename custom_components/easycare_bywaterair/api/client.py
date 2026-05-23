@@ -105,7 +105,6 @@ class EasyCareClient:
         await client.set_bpc_manual(watbox, bpc, index=0, action="on", duration_minutes=60)
 
         # Mode filtration
-        status = await client.get_pool_status()
         await client.set_filtration_mode("AUTO")
 
         # Boost
@@ -133,6 +132,12 @@ class EasyCareClient:
         # ID MongoDB de la piscine — renseigné après le premier get_user()
         # et transmis à get_pool_status via ?poolId=
         self._pool_db_id: str = ""
+        # IJC ID du BPC — lu dans le champ "id" (sans underscore) de la réponse
+        # getUserWithHisModules, et mis en cache après le premier get_bpc_status().
+        # Confirmé APK : ManufacturerData.mIDIJC = jSONObject.getString("id").
+        # Utilisé comme champ "id" dans les enveloppes setStatusCommandToSend
+        # et reportManualCommandSent.
+        self._bpc_module_id: str = ""
 
     # ════════════════════════════════════════════════════════════════════════
     # MÉTHODES PUBLIQUES — LECTURE
@@ -298,6 +303,12 @@ class EasyCareClient:
 
         data = await self._request("GET", API_HOST_EASYCARE, path)
 
+        # Mise en cache de l'IJC ID du BPC pour les commandes setStatusCommandToSend
+        # et reportManualCommandSent. Confirmé APK : c'est le champ "id" (sans
+        # underscore) de la réponse module, qui correspond à ManufacturerData.mIDIJC.
+        if bpc.id:
+            self._bpc_module_id = bpc.id
+
         pool_inputs = data.get("pool") or []
         inputs: list[BPCInput] = []
         for raw_input in pool_inputs:
@@ -406,13 +417,28 @@ class EasyCareClient:
             json_payload=payload,
         )
 
-        # Étape 2 — confirmation obligatoire (sinon le serveur peut ignorer la commande)
+        # Étape 2 — confirmation obligatoire (sinon le serveur peut ignorer la commande).
+        # Confirmé APK (Networking.java l.6176-6188) : même enveloppe que
+        # setStatusCommandToSend → {"id": <ijc_id>, "command": <pool_cmd>, "route": "http"}
+        # La "command" imbriquée est le JSON URLManual-transformé : {"pool": {...}}.
+        pool_cmd: dict[str, Any] = {
+            "index": int(index),
+            "action": action_code,
+        }
+        if action_code == BPC_ACTION_ON:
+            pool_cmd["manualDuration"] = int(duration_minutes) * 60
+
+        report_payload: dict[str, Any] = {
+            "id": bpc.id,
+            "command": {"pool": pool_cmd},
+            "route": "http",
+        }
         try:
             await self._request(
                 "POST",
                 API_HOST_EASYCARE,
                 API_PATH_REPORT_MANUAL_SENT,
-                json_payload={},
+                json_payload=report_payload,
             )
         except Exception as err:  # noqa: BLE001 — étape 2 non-critique
             _LOGGER.warning(
@@ -436,12 +462,20 @@ class EasyCareClient:
             raise ValueError(
                 f"Mode invalide : {mode!r} (attendu : {', '.join(FILTRATION_MODES)})"
             )
-        _LOGGER.debug("Changement mode filtration → %s", mode_upper)
+        # Enveloppe confirmée APK (NetworkingModule.java + Networking.java) :
+        #   {"id": <ijc_id>, "command": {"mode": "..."}, "wakeUp": false}
+        # Le champ "id" = ManufacturerData.mIDIJC = Module.id (champ "id" sans underscore).
+        # wakeUp = Product.typeCanReceiveSMS(...) — false pour le BPC WiFi.
+        payload: dict[str, Any] = {
+            "id": self._bpc_module_id,
+            "command": {"mode": mode_upper},
+            "wakeUp": False,
+        }
         await self._request(
             "POST",
             API_HOST_EASYCARE,
             API_PATH_SET_STATUS_COMMAND,
-            json_payload={"mode": mode_upper},
+            json_payload=payload,
         )
         return True
 
@@ -454,22 +488,32 @@ class EasyCareClient:
                 f"(attendu : {', '.join(BOOST_MODES)})"
             )
         _LOGGER.debug("Démarrage boost %s", boost_upper)
+        payload: dict[str, Any] = {
+            "id": self._bpc_module_id,
+            "command": {"mode": boost_upper},
+            "wakeUp": False,
+        }
         await self._request(
             "POST",
             API_HOST_EASYCARE,
             API_PATH_SET_STATUS_COMMAND,
-            json_payload={"mode": boost_upper},
+            json_payload=payload,
         )
         return True
 
     async def cancel_boost(self) -> bool:
         """Annule le boost de filtration en cours."""
         _LOGGER.debug("Annulation boost en cours")
+        payload: dict[str, Any] = {
+            "id": self._bpc_module_id,
+            "command": {"mode": BOOST_CANCEL},
+            "wakeUp": False,
+        }
         await self._request(
             "POST",
             API_HOST_EASYCARE,
             API_PATH_SET_STATUS_COMMAND,
-            json_payload={"mode": BOOST_CANCEL},
+            json_payload=payload,
         )
         return True
 

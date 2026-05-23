@@ -45,7 +45,6 @@ from .api.client import EasyCareClient
 from .api.exceptions import (
     EasyCareApiError,
     EasyCareConnectionError,
-    EasyCareError,
     EasyCareInvalidResponseError,
     EasyCareTimeoutError,
     EasyCareTokenExpiredError,
@@ -284,6 +283,48 @@ class EasyCareModulesCoordinator(DataUpdateCoordinator[tuple[Module, ...]]):
         return tuple(m for m in self.data if m.type == module_type)
 
 
+# Mapping origin (voie pompe) → mode de filtration.
+# Confirmé par reverse-engineering de l'APK :
+#   origin=3 + info=['boost'] → boost actif (pas un mode filtration persistent)
+# Les valeurs 0/1/2 sont une hypothèse à confirmer sur données réelles.
+_ORIGIN_TO_FILTRATION_MODE: dict[int, str] = {
+    0: "AUTO",
+    1: "PROG",
+    2: "CONTINUOUS",
+    # 3 = déclenchement manuel (boost ou commande manuelle) → pas un mode persistent
+}
+
+
+def _pool_status_from_inputs(inputs: tuple[BPCInput, ...]) -> PoolStatus | None:
+    """Construit un PoolStatus depuis les voies BPC, sans appel réseau.
+
+    La source de vérité pour l'état de filtration est la voie pompe (index 0)
+    du tableau `pool` de la réponse BPC :
+      - value=1/0        : pompe ON/OFF
+      - info=['boost']   : boost actif
+      - time='HH:MM'     : temps restant (boost ou commande manuelle)
+      - origin=0/1/2/3   : mode de déclenchement
+
+    Returns:
+        PoolStatus dérivé, ou None si la voie pompe est absente.
+    """
+    pump = next((i for i in inputs if i.index == 0), None)
+    if pump is None:
+        return None
+
+    # Mode filtration depuis origin (quand pas en boost)
+    mode: str | None = None
+    if not pump.is_boosting and pump.origin is not None:
+        mode = _ORIGIN_TO_FILTRATION_MODE.get(pump.origin)
+
+    return PoolStatus(
+        mode=mode,
+        power_state="on" if pump.is_on else "off",
+        boost_remaining_time=pump.remaining_time if pump.is_boosting else "00:00",
+        is_pool_power=pump.is_on,
+    )
+
+
 class EasyCareBPCCoordinator(DataUpdateCoordinator[BPCData]):
     """Coordinator pour l'état temps réel du BPC (pompe + lumières + filtration).
 
@@ -374,31 +415,20 @@ class EasyCareBPCCoordinator(DataUpdateCoordinator[BPCData]):
         except Exception as err:  # noqa: BLE001
             raise _wrap_api_error(err, "get_bpc_status") from err
 
-        # Appel secondaire : pool_status (mode filtration, boost, compteurs)
-        # get_pool_status est une feature secondaire — toute erreur dégrade
-        # gracieusement sans bloquer le BPC (pompe + lumières).
-        pool_status: PoolStatus | None = None
-        try:
-            pool_status = await self._client.get_pool_status()
-        except EasyCareError as err:
-            _LOGGER.warning(
-                "get_pool_status indisponible — fonctionnement dégradé : %s",
-                err,
-            )
-
         self._last_real_update = datetime.now(tz=timezone.utc)
 
-        if pool_status is not None:
-            _LOGGER.warning(
-                "pool_status raw: %s",
-                {k: v for k, v in pool_status.raw.items() if not isinstance(v, (dict, list))},
-            )
+        # Dérive le PoolStatus depuis la voie pompe (index 0) du BPC.
+        # L'API getPoolStatus renvoie uniquement la configuration de la piscine
+        # (modèle, volume, pH attendu…) et non l'état de filtration.
+        # L'état réel (boost, pompe ON/OFF, temps restant) vient du tableau
+        # `pool` de la réponse BPC.
+        pool_status = _pool_status_from_inputs(inputs)
 
         _LOGGER.debug(
-            "BPC update OK : %d voie(s), active=%s, pool_status=%s",
+            "BPC update OK : %d voie(s), active=%s, boost=%s",
             len(inputs),
             [inp.index for inp in inputs if inp.is_on],
-            "OK" if pool_status else "indisponible",
+            pool_status.is_boosting if pool_status else False,
         )
 
         return BPCData(inputs=inputs, pool_status=pool_status)

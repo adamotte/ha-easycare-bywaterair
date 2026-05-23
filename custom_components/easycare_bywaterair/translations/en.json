@@ -68,6 +68,7 @@
         "name": "Filtration boost",
         "state": {
           "off": "Inactive",
+          "active": "Active",
           "BOOST4H": "4 hours",
           "BOOST12H": "12 hours",
           "BOOST24H": "24 hours",

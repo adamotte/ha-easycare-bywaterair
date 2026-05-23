@@ -20,7 +20,7 @@ Intégration Home Assistant moderne pour les piscines équipées de l'écosystè
 - 💡 **Lumières** : projecteur (spot) et éclairage des marches (escalight)
 - 💧 **Pompe de filtration** : marche/arrêt
 - 🔄 **Mode de filtration** : AUTO / Marche forcée / Arrêt / Programmation
-- ⚡ **Boost** : 12h / 24h / annulation
+- ⚡ **Boost** : 4h / 12h / 24h / 36h / 48h / 72h / annulation
 
 ### Avantages techniques
 - 🔐 **Refresh token automatique** — plus besoin de re-saisir le token tous les 2 mois
@@ -61,7 +61,7 @@ L'intégration s'occupe ensuite du renouvellement automatique des tokens.
 | `easycare_bywaterair.pump_on` | Démarre la pompe | `duration_minutes` (1-1440, défaut 60) |
 | `easycare_bywaterair.pump_off` | Arrête la pompe | — |
 | `easycare_bywaterair.set_filtration_mode` | Change le mode | `mode` (AUTO/CONTINUOUS/MANUAL/PROG) |
-| `easycare_bywaterair.start_boost` | Lance un boost | `duration` (BOOST12H/BOOST24H) |
+| `easycare_bywaterair.start_boost` | Lance un boost | `duration` (BOOST4H/BOOST12H/BOOST24H/BOOST36H/BOOST48H/BOOST72H) |
 | `easycare_bywaterair.cancel_boost` | Annule le boost | — |
 | `easycare_bywaterair.refresh_data` | Force un refresh | — |
 
@@ -96,12 +96,14 @@ automation:
 
 ## ⚠️ Limitations connues
 
-- **Mode BOOST avec durée personnalisée** non supporté (seules 12h et 24h).
+- **Mode BOOST avec durée personnalisée** non supporté — les durées disponibles
+  sont 4h, 12h, 24h, 36h, 48h et 72h.
 - **Programmation horaire** (mode PROG) : lecture/écriture des plages horaires
   pas encore exposée — l'utilisateur configure via l'app mobile.
-- **Endpoints Solem** (`apiwf.solem.fr`) utilisés pour le mode filtration et
-  les compteurs — ce host peut nécessiter des ajustements selon l'évolution
-  de l'API Waterair.
+- **Mode de filtration illisible pompe à l'arrêt** — lorsque la pompe est
+  éteinte et qu'aucun boost n'est actif, le mode (AUTO/PROG/CONTINUOUS) ne
+  peut pas être déterminé depuis l'API ; l'entité select affiche "Inconnu"
+  jusqu'à la prochaine mise en marche.
 
 ## 🐛 Debug
 

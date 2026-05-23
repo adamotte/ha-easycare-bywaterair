@@ -528,31 +528,53 @@ class Module:
 class BPCInput:
     """Une voie (input) du BPC : pompe, projecteur ou éclairage de marches.
 
-    Le champ `time` contient le temps restant au format "HH:MM" :
-      - "00:00"   → voie inactive
-      - autre val → voie en marche, temps restant indiqué
+    Structure de la réponse API (confirmée par reverse-engineering) :
+      {'index': 0, 'origin': 3, 'time': '02:40', 'value': 1, 'info': ['boost']}
+      {'index': 1, 'time': '00:00', 'tempRef': 4, 'value': 0}
 
-    Index conventionnels (confirmés par l'APK et le code source du plugin) :
+    Champs clés :
+      - value   : 1 = voie active, 0 = voie inactive (source de vérité)
+      - time    : temps restant au format "HH:MM" (boost ou commande manuelle)
+      - info    : liste de tags — ['boost'] quand un boost est actif
+      - origin  : encode comment la voie a été déclenchée (mapping TBD)
+      - temp_ref: référence de température (lumières uniquement, pour mode AUTO)
+
+    Index conventionnels :
       - 0 = pompe de filtration
       - 1 = projecteur (spot)
       - 2 = éclairage des marches (escalight)
     """
 
     index: int
-    remaining_time: str = "00:00"
+    value: int = 0                      # 0=off, 1=on (source de vérité)
+    remaining_time: str = "00:00"       # "HH:MM" — boost ou commande manuelle
+    origin: int | None = None           # déclencheur : 0=AUTO, 1=PROG, 2=CONTINUOUS, 3=manuel
+    info: tuple[str, ...] = ()          # tags : ['boost'] si boost actif
+    temp_ref: int | None = None         # référence température (lumières)
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
 
     @property
     def is_on(self) -> bool:
-        """Vrai si la voie est actuellement active."""
-        return self.remaining_time != "00:00"
+        """Vrai si la voie est active (basé sur `value`, source de vérité)."""
+        return self.value == 1
+
+    @property
+    def is_boosting(self) -> bool:
+        """Vrai si la pompe tourne en mode boost (info contient 'boost')."""
+        return "boost" in self.info
 
     @classmethod
     def from_api(cls, data: dict[str, Any]) -> BPCInput:
         """Parse une voie depuis la réponse /api/module/.../status/..."""
+        origin_raw = data.get("origin")
+        temp_ref_raw = data.get("tempRef")
         return cls(
             index=int(_require(data, "index", "BPCInput")),
+            value=int(data.get("value", 0) or 0),
             remaining_time=str(data.get("time", "00:00") or "00:00"),
+            origin=int(origin_raw) if origin_raw is not None else None,
+            info=tuple(str(i) for i in (data.get("info") or [])),
+            temp_ref=int(temp_ref_raw) if temp_ref_raw is not None else None,
             raw=data,
         )
 

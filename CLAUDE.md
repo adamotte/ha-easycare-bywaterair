@@ -28,14 +28,13 @@ There are no automated tests or linters configured. HA integration validation ca
 
 ## Architecture
 
-### Two API backends
+### Single API backend
 
 All constants (hosts, paths, credentials) are in `const.py`.
 
-- **`https://easycare.waterair.com`** — main Waterair backend: user/pool data, module list, BPC control (pump/lights)
-- **`https://apiwf.solem.fr`** — Solem backend: filtration mode, boost, runtime counters
+- **`https://easycare.waterair.com`** — sole Waterair backend: user/pool data, module list, BPC control (pump/lights), filtration mode, boost commands.
 
-The Solem backend is optional — if it's unreachable, the BPC coordinator degrades gracefully (pool_status returns `None`).
+The Solem backend (`apiwf.solem.fr`) was removed after analysis confirmed all filtration state is readable from the BPC status endpoint (`/api/module/{watbox}/status/{bpc}`) via the `pool` array items.
 
 ### Authentication chain (two-step)
 
@@ -53,7 +52,7 @@ The PKCE code_verifier/challenge and the OAuth client ID are fixed values extrac
 |---|---|---|
 | `EasyCareUserCoordinator` | 30 min | pH, chlorine, temperature, alerts, treatment, owner |
 | `EasyCareModulesCoordinator` | 24 h | Module list (WATBOX, BPC, AC1, LR-PR) |
-| `EasyCareBPCCoordinator` | 1 min / 10 min (idle) | BPC inputs (pump/lights), pool status |
+| `EasyCareBPCCoordinator` | 1 min / 10 min (idle) | BPC pool inputs (pump/lights), derived filtration state |
 
 The BPC coordinator has adaptive polling: when no BPC input is active, it skips real API calls and returns cached data, only forcing a live call every `SCAN_INTERVAL_BPC_IDLE_FACTOR` (10) cycles. This reduces load when the pump and lights are all off.
 
@@ -72,10 +71,25 @@ Entities are only created if the corresponding module is present in the modules 
 ### BPC manual commands require two API calls
 
 Sending a pump/light command (`switch.py`, `light.py`) always calls:
-1. `POST /api/module/{watbox}/manual/{bpc}` — send the command
-2. `POST /api/reportManualCommandSent` — confirm the command (mandatory second step, discovered from APK)
+1. `POST /api/module/{watbox}/manual/{bpc}` with `{"pool": {"index": N, "action": 2, "manualDuration": D}}` — send the command
+2. `POST /api/reportManualCommandSent` with `{"id": bpc.id, "command": {"pool": {"index": N, "action": 2, "manualDuration": D}}, "route": "http"}` — confirm the command (mandatory second step)
 
 Missing step 2 leaves the command un-acknowledged on the server side.
+
+### Filtration mode / boost commands — confirmed payload structure (APK)
+
+`POST /api/setStatusCommandToSend` requires this exact envelope (confirmed from Solem SDK source,
+`Networking.java` + `NetworkingModule.java`):
+
+```json
+{"id": "<bpc_ijc_id>", "command": {"mode": "AUTO"}, "wakeUp": false}
+```
+
+- `"id"` = `bpc.id` = `Module.id` = champ `"id"` (sans underscore) de la réponse API module = `ManufacturerData.mIDIJC` côté Solem SDK
+- `"command"` = objet JSON passé au SDK ; `"mode"` = chaîne (AUTO/CONTINUOUS/MANUAL/PROG/BOOST12H/etc.)
+- `"wakeUp"` = false pour le BPC WiFi (pas de réveil SMS)
+
+`bpc.id` est mis en cache dans `EasyCareClient._bpc_module_id` après le premier `get_bpc_status()`.
 
 ### BPC input indices (from APK analysis)
 
