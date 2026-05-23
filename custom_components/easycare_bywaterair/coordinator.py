@@ -66,15 +66,19 @@ class UserData:
 class BPCData:
     """Données retournées par EasyCareBPCCoordinator.
 
-    filtration_mode : mode dérivé des programmes BPC (AUTO/CONTINUOUS/MANUAL/PROG).
-    adapt_offset    : offset AUTO en minutes (-60=AUTO-2H, 0=standard, +60=AUTO+2H).
-    pool_status     : état pompe et boost (None si voie pompe absente).
+    filtration_mode  : mode dérivé des programmes BPC (AUTO/CONTINUOUS/MANUAL/PROG).
+    adapt_offset     : offset AUTO en minutes (-60=AUTO-2H, 0=standard, +60=AUTO+2H).
+    pool_status      : état pompe et boost (None si voie pompe absente).
+    spot_program     : programCharacteristics brut du spot (index 1), None si absent.
+    escalight_program: programCharacteristics brut de l'escalight (index 2), None si absent.
     """
 
     inputs: tuple[BPCInput, ...]
     pool_status: PoolStatus | None = None
     filtration_mode: str | None = None
     adapt_offset: int = 0
+    spot_program: dict | None = None
+    escalight_program: dict | None = None
 
     def get_input(self, index: int) -> BPCInput | None:
         """Retourne la voie BPC d'index donné, ou None si absente."""
@@ -235,8 +239,12 @@ class EasyCareBPCCoordinator(DataUpdateCoordinator[BPCData]):
 
         filtration_mode: str | None = None
         adapt_offset = 0
+        spot_program: dict | None = None
+        escalight_program: dict | None = None
         try:
-            filtration_mode, adapt_offset = await self._client.get_bpc_programs_data()
+            filtration_mode, adapt_offset, spot_program, escalight_program = (
+                await self._client.get_bpc_programs_data()
+            )
         except Exception as err:  # noqa: BLE001
             _LOGGER.debug("get_bpc_programs_data ignoré (non-fatal) : %s", err)
 
@@ -249,6 +257,8 @@ class EasyCareBPCCoordinator(DataUpdateCoordinator[BPCData]):
             pool_status=pool_status,
             filtration_mode=filtration_mode,
             adapt_offset=adapt_offset,
+            spot_program=spot_program,
+            escalight_program=escalight_program,
         )
 
     def _should_skip_cycle(self) -> bool:

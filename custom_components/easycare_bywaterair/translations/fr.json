@@ -96,6 +96,8 @@
       "pump_counter_date": {"name": "Date référence compteur"},
       "pump_daily_runtime": {"name": "Durée pompe aujourd'hui"},
       "boost_remaining": {"name": "Temps boost restant"},
+      "spot_mode": {"name": "Mode projecteur"},
+      "escalight_mode": {"name": "Mode éclairage marches"},
       "owner": {"name": "Propriétaire du compte"},
       "detail": {"name": "Modèle de piscine"}
     },

@@ -203,40 +203,56 @@ class EasyCareClient:
         data = await self._request("GET", API_HOST_EASYCARE, path)
         return PoolStatus.from_api(data)
 
-    async def get_bpc_programs_data(self) -> tuple[str | None, int]:
-        """Lit le mode de filtration et l'adaptOffset depuis les programmes BPC.
+    async def get_bpc_programs_data(self) -> tuple[str | None, int, dict | None, dict | None]:
+        """Lit les programmes BPC pour la pompe et les lumières.
 
-        Le mode est dérivé de `programCharacteristics` du programme pompe (index 0) :
+        Pompe (index 0) — mode de filtration et adaptOffset :
           mode=0 → MANUAL, mode=1 → CONTINUOUS,
           mode=2 + rule=1 → AUTO, mode=2 + rule=0 → PROG.
 
+        Lumières (index 1=spot, index 2=escalight) — `programCharacteristics`
+        brut retourné tel quel pour un parsing défensif côté coordinator.
+
         Returns:
-            Tuple (filtration_mode, adapt_offset).
+            Tuple (filtration_mode, adapt_offset, spot_program, escalight_program).
             filtration_mode est None si les modules ne sont pas disponibles.
         """
         if self._watbox is None or self._bpc is None:
-            return None, 0
+            return None, 0, None, None
         path = API_PATH_BPC_PROGRAMS.format(
             watbox_serial=self._watbox.serial_number, bpc_name=self._bpc.short_name,
         )
         data = await self._request("GET", API_HOST_EASYCARE, path)
         programs = data.get("programs") or []
+
+        filtration_mode: str | None = None
+        adapt_offset: int = 0
+        spot_program: dict | None = None
+        escalight_program: dict | None = None
+
         for prog in programs:
-            if prog.get("index") == 0:
-                charac = prog.get("programCharacteristics") or {}
+            idx = prog.get("index")
+            charac = prog.get("programCharacteristics") or {}
+            if idx == 0:
                 prog_mode = int(charac.get("mode", 0) or 0)
                 prog_rule = int(charac.get("rule", 0) or 0)
                 adapt_offset = int(charac.get("adaptOffset", 0) or 0)
                 if prog_mode == 0:
-                    filtration_mode: str | None = "MANUAL"
+                    filtration_mode = "MANUAL"
                 elif prog_mode == 1:
                     filtration_mode = "CONTINUOUS"
                 elif prog_mode == 2 and prog_rule == 1:
                     filtration_mode = "AUTO"
                 else:
                     filtration_mode = "PROG"
-                return filtration_mode, adapt_offset
-        return None, 0
+            elif idx == 1:
+                spot_program = dict(charac)
+                _LOGGER.debug("BPC programmes — spot (index 1) programCharacteristics : %s", charac)
+            elif idx == 2:
+                escalight_program = dict(charac)
+                _LOGGER.debug("BPC programmes — escalight (index 2) programCharacteristics : %s", charac)
+
+        return filtration_mode, adapt_offset, spot_program, escalight_program
 
     async def set_bpc_manual(
         self,
