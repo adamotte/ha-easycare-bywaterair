@@ -31,7 +31,6 @@ from .const import (
     BOOST_CANCEL,
     BOOST_MODES,
     DOMAIN,
-    FILTRATION_MODES,
     FILTRATION_MODES_WITH_OFFSET,
     MODE_AUTO,
     MODE_AUTO_MINUS,
@@ -85,22 +84,23 @@ class EasyCareFiltrationModeSelect(
 
     @property
     def current_option(self) -> str | None:
-        """Mode courant dérivé de (pool_status.mode, adapt_offset).
+        """Mode courant dérivé de (filtration_mode, adapt_offset).
+
+        filtration_mode vient des programmes BPC (endpoint programs),
+        qui reflète la configuration réelle — pas le champ `origin` du
+        tableau `pool` (qui encode le mode de déclenchement, pas le mode config).
 
         Mapping :
           - mode=AUTO + offset=-60 → AUTO-2H
           - mode=AUTO + offset=0   → AUTO
           - mode=AUTO + offset=+60 → AUTO+2H
           - mode=CONTINUOUS/MANUAL/PROG → inchangé
-
-        Si on est dans un mode boost (BOOST12H, etc.), on ne peut pas le
-        mapper à un mode principal — on retourne None.
         """
-        if self.coordinator.data is None or self.coordinator.data.pool_status is None:
+        if self.coordinator.data is None:
             return None
-        mode = self.coordinator.data.pool_status.mode
-        if mode is None or mode not in FILTRATION_MODES:
-            return None  # mode boost ou inconnu → pas de sélection affichée
+        mode = self.coordinator.data.filtration_mode
+        if mode is None:
+            return None
 
         if mode == MODE_AUTO:
             offset = self.coordinator.data.adapt_offset

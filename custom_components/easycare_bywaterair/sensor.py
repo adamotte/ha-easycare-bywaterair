@@ -366,9 +366,9 @@ class EasyCareFiltrationModeSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], Se
 
     @property
     def native_value(self) -> str | None:
-        if self.coordinator.data is None or self.coordinator.data.pool_status is None:
+        if self.coordinator.data is None:
             return None
-        return self.coordinator.data.pool_status.mode
+        return self.coordinator.data.filtration_mode
 
 
 class EasyCarePumpTotalRuntimeSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], SensorEntity):
