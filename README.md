@@ -1,11 +1,10 @@
 # Easy-care by Waterair — Intégration Home Assistant
 
-Intégration Home Assistant moderne pour les piscines équipées de l'écosystème
+Intégration Home Assistant pour les piscines équipées de l'écosystème
 **Easy-care by Waterair** (WATBOX + BPC + AC1).
 
 > ⚠️ **Cette intégration n'est pas officielle.** Elle est développée de manière
-> indépendante par reverse-engineering de l'application Android officielle.
-> Waterair n'est pas affilié à ce projet.
+> indépendante. Waterair n'est pas affilié à ce projet.
 
 ## ✨ Fonctionnalités
 
@@ -19,7 +18,7 @@ Intégration Home Assistant moderne pour les piscines équipées de l'écosystè
 ### Pilotage
 - 💡 **Lumières** : projecteur (spot) et éclairage des marches (escalight)
 - 💧 **Pompe de filtration** : marche/arrêt
-- 🔄 **Mode de filtration** : AUTO / Marche forcée / Arrêt / Programmation
+- 🔄 **Mode de filtration** : AUTO (-2h / standard / +2h) / Marche forcée / Arrêt
 - ⚡ **Boost** : 4h / 12h / 24h / 36h / 48h / 72h / annulation
 
 ### Avantages techniques
@@ -60,8 +59,8 @@ L'intégration s'occupe ensuite du renouvellement automatique des tokens.
 |---|---|---|
 | `easycare_bywaterair.pump_on` | Démarre la pompe | `duration_minutes` (1-1440, défaut 60) |
 | `easycare_bywaterair.pump_off` | Arrête la pompe | — |
-| `easycare_bywaterair.set_filtration_mode` | Change le mode | `mode` (AUTO/CONTINUOUS/MANUAL/PROG) |
-| `easycare_bywaterair.start_boost` | Lance un boost | `duration` (BOOST4H/BOOST12H/BOOST24H/BOOST36H/BOOST48H/BOOST72H) |
+| `easycare_bywaterair.set_filtration_mode` | Change le mode | `mode` (AUTO / CONTINUOUS / MANUAL) |
+| `easycare_bywaterair.start_boost` | Lance un boost | `duration` (BOOST4H / BOOST12H / BOOST24H / BOOST36H / BOOST48H / BOOST72H) |
 | `easycare_bywaterair.cancel_boost` | Annule le boost | — |
 | `easycare_bywaterair.refresh_data` | Force un refresh | — |
 
@@ -98,12 +97,9 @@ automation:
 
 - **Mode BOOST avec durée personnalisée** non supporté — les durées disponibles
   sont 4h, 12h, 24h, 36h, 48h et 72h.
-- **Programmation horaire** (mode PROG) : lecture/écriture des plages horaires
-  pas encore exposée — l'utilisateur configure via l'app mobile.
-- **Mode de filtration illisible pompe à l'arrêt** — lorsque la pompe est
-  éteinte et qu'aucun boost n'est actif, le mode (AUTO/PROG/CONTINUOUS) ne
-  peut pas être déterminé depuis l'API ; l'entité select affiche "Inconnu"
-  jusqu'à la prochaine mise en marche.
+- **Mode PROG (programmation horaire)** : détecté en lecture (capteur
+  `filtration_mode`), mais pas proposé comme option dans le sélecteur.
+  La configuration des plages horaires reste dans l'app mobile.
 
 ## 🐛 Debug
 

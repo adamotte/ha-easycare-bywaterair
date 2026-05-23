@@ -1,33 +1,29 @@
 """Plateforme sensor pour Easy-care by Waterair.
 
-Expose tous les capteurs en lecture seule, répartis sur 3 appareils :
+Expose tous les capteurs en lecture seule, répartis sur 4 appareils :
 
-  Appareil AC1 (Analyseur Connecté) — depuis coordinator USER
+  Appareil AC1 (Analyseur Connecté) — coordinator USER
   ├── sensor.easycare_bywaterair_ph
   ├── sensor.easycare_bywaterair_chlorine        (Redox/ORP, en mV)
   ├── sensor.easycare_bywaterair_temperature     (eau, en °C)
   ├── sensor.easycare_bywaterair_notification    (dernière alerte)
   ├── sensor.easycare_bywaterair_treatment       (traitement en cours)
-  └── sensor.easycare_bywaterair_battery_ac1     (NOUVEAU, depuis modules)
+  └── sensor.easycare_bywaterair_battery_ac1
 
-  Appareil BPC — depuis coordinator BPC
-  ├── sensor.easycare_bywaterair_pump_state            (NOUVEAU)
-  ├── sensor.easycare_bywaterair_filtration_mode      (NOUVEAU)
-  ├── sensor.easycare_bywaterair_pump_total_runtime   (NOUVEAU)
-  ├── sensor.easycare_bywaterair_pump_counter_date    (NOUVEAU)
-  ├── sensor.easycare_bywaterair_pump_daily_runtime   (NOUVEAU)
-  └── sensor.easycare_bywaterair_boost_remaining      (NOUVEAU)
+  Appareil BPC — coordinator BPC
+  ├── sensor.easycare_bywaterair_pump_state
+  ├── sensor.easycare_bywaterair_filtration_mode
+  ├── sensor.easycare_bywaterair_pump_total_runtime
+  ├── sensor.easycare_bywaterair_pump_counter_date
+  ├── sensor.easycare_bywaterair_pump_daily_runtime
+  └── sensor.easycare_bywaterair_boost_remaining
 
-  Appareil LR-PR (si présent) — depuis coordinator USER
+  Appareil LR-PR (si présent) — coordinator USER
   └── sensor.easycare_bywaterair_pressure        (pression filtration)
 
-  Appareil WATBOX — depuis coordinator USER
-  ├── sensor.easycare_bywaterair_owner          (propriétaire compte)
-  └── sensor.easycare_bywaterair_detail         (modèle piscine + volume)
-
-Les capteurs AC1 sont rattachés à l'appareil AC1 (pas WATBOX) car ce sont
-ses propres mesures. Cela représente une amélioration par rapport au plugin
-existant qui les laissait à la racine sans appareil.
+  Appareil WATBOX — coordinator USER
+  ├── sensor.easycare_bywaterair_owner           (propriétaire compte)
+  └── sensor.easycare_bywaterair_detail          (modèle piscine)
 """
 
 from __future__ import annotations
@@ -83,7 +79,6 @@ async def async_setup_entry(
 
     sensors: list[SensorEntity] = []
 
-    # ──── Appareil AC1 (analyseur) — mesures piscine ────
     has_ac1 = bool(coords.modules.get_modules_by_type(MODULE_TYPE_AC1))
     if has_ac1:
         sensors.extend([
@@ -95,7 +90,6 @@ async def async_setup_entry(
             EasyCareAC1BatterySensor(coords.modules, entry),
         ])
 
-    # ──── Appareil BPC — état pompe et filtration ────
     if coords.modules.get_bpc() is not None:
         sensors.extend([
             EasyCarePumpStateSensor(coords.bpc, entry),
@@ -106,11 +100,9 @@ async def async_setup_entry(
             EasyCareBoostRemainingSensor(coords.bpc, entry),
         ])
 
-    # ──── Appareil LR-PR (si présent) ────
     if coords.modules.get_modules_by_type(MODULE_TYPE_PRESSURE):
         sensors.append(EasyCarePressureSensor(coords.user, entry))
 
-    # ──── Appareil WATBOX — méta (propriétaire, modèle piscine) ────
     sensors.extend([
         EasyCareOwnerSensor(coords.user, entry),
         EasyCareDetailSensor(coords.user, entry),
@@ -118,11 +110,6 @@ async def async_setup_entry(
 
     _LOGGER.debug("Création de %d sensors", len(sensors))
     async_add_entities(sensors)
-
-
-# ═════════════════════════════════════════════════════════════════════════════
-# SENSORS AC1 (analyseur connecté) — coordinator USER
-# ═════════════════════════════════════════════════════════════════════════════
 
 
 class EasyCarePhSensor(EasyCareAC1Entity[EasyCareUserCoordinator], SensorEntity):
@@ -138,7 +125,6 @@ class EasyCarePhSensor(EasyCareAC1Entity[EasyCareUserCoordinator], SensorEntity)
 
     @property
     def native_value(self) -> float | None:
-        """Valeur du pH."""
         if self.coordinator.data is None:
             return None
         return self.coordinator.data.metrics.ph_value
@@ -155,8 +141,7 @@ class EasyCareChlorineSensor(EasyCareAC1Entity[EasyCareUserCoordinator], SensorE
     """Mesure du chlore (Redox/ORP en mV).
 
     L'AC1 mesure le potentiel redox (ORP) et non une concentration directe
-    de chlore. La conversion ORP → mg/L dépend du pH et de la température,
-    on expose donc la valeur brute en mV.
+    de chlore. La valeur brute en mV est exposée telle quelle.
     """
 
     _attr_translation_key = "chlorine"
@@ -266,16 +251,11 @@ class EasyCareAC1BatterySensor(
 ):
     """Niveau de batterie de l'analyseur AC1.
 
-    L'API retourne `getBatteryLevel` comme entier brut. L'échelle exacte
-    (1-5 barres ? 0-100% ? autre ?) n'est pas confirmée par l'APK.
-
-    Stratégie adoptée : on expose la valeur brute en attribut, et on tente
-    une conversion en % en supposant une échelle 0-5 (5 = plein). Si vous
-    constatez que c'est faux à l'usage, ajustez `BATTERY_MAX` ci-dessous.
+    L'API retourne la valeur sur une échelle 0-5. Ajustez BATTERY_MAX si la
+    valeur affichée ne correspond pas à la réalité.
     """
 
     BATTERY_MAX: float = 5.0
-    """Échelle supposée du champ getBatteryLevel — à ajuster empiriquement."""
 
     _attr_translation_key = "battery_ac1"
     _attr_device_class = SensorDeviceClass.BATTERY
@@ -293,16 +273,13 @@ class EasyCareAC1BatterySensor(
 
     @property
     def native_value(self) -> int | None:
-        """Niveau batterie en pourcentage (converti depuis la valeur brute)."""
+        """Niveau batterie en pourcentage."""
         ac1 = self._get_ac1()
         if ac1 is None or ac1.battery_level is None:
             return None
-
         raw = float(ac1.battery_level)
-        # Échelle 0-5 supposée → conversion en %
         if raw <= self.BATTERY_MAX:
             return int(min(100, max(0, raw / self.BATTERY_MAX * 100)))
-        # Si déjà en % (0-100), on retourne tel quel
         return int(min(100, max(0, raw)))
 
     @property
@@ -314,21 +291,11 @@ class EasyCareAC1BatterySensor(
             "raw_value": ac1.battery_level,
             "scale_max": self.BATTERY_MAX,
             "serial_number": ac1.serial_number,
-            "note": "Si le %  semble incorrect, ajustez BATTERY_MAX dans sensor.py",
         }
 
 
-# ═════════════════════════════════════════════════════════════════════════════
-# SENSORS BPC — coordinator BPC
-# ═════════════════════════════════════════════════════════════════════════════
-
-
 class EasyCarePumpStateSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], SensorEntity):
-    """État textuel de la pompe (ON / OFF) avec temps restant en attribut.
-
-    Pour le contrôle ON/OFF, voir switch.easycare_bywaterair_pump.
-    Ce sensor est utile pour les automations et l'affichage.
-    """
+    """État textuel de la pompe (on/off) avec temps restant en attribut."""
 
     _attr_translation_key = "pump_state"
     _attr_icon = "mdi:pump"
@@ -356,7 +323,7 @@ class EasyCarePumpStateSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], SensorE
 
 
 class EasyCareFiltrationModeSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], SensorEntity):
-    """Mode de filtration actuel : AUTO / CONTINUOUS / MANUAL / PROG / BOOST*."""
+    """Mode de filtration actuel : AUTO / CONTINUOUS / MANUAL / PROG."""
 
     _attr_translation_key = "filtration_mode"
     _attr_icon = "mdi:water-sync"
@@ -372,11 +339,7 @@ class EasyCareFiltrationModeSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], Se
 
 
 class EasyCarePumpTotalRuntimeSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], SensorEntity):
-    """Durée totale de fonctionnement de la pompe (ex: '3136:45').
-
-    Format brut conservé tel quel pour fidélité à l'UI Waterair.
-    Pour des heures décimales, utilisez un template sensor en YAML.
-    """
+    """Durée totale de fonctionnement de la pompe (format HH:MM)."""
 
     _attr_translation_key = "pump_total_runtime"
     _attr_icon = "mdi:timer-outline"
@@ -392,7 +355,7 @@ class EasyCarePumpTotalRuntimeSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], 
 
 
 class EasyCarePumpCounterDateSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], SensorEntity):
-    """Date de référence du compteur de la pompe (installation/remplacement)."""
+    """Date de référence du compteur de la pompe."""
 
     _attr_translation_key = "pump_counter_date"
     _attr_device_class = SensorDeviceClass.DATE
@@ -410,7 +373,7 @@ class EasyCarePumpCounterDateSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], S
 
 
 class EasyCarePumpDailyRuntimeSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], SensorEntity):
-    """Durée de fonctionnement de la pompe aujourd'hui (HH:MM:SS)."""
+    """Durée de fonctionnement de la pompe aujourd'hui."""
 
     _attr_translation_key = "pump_daily_runtime"
     _attr_icon = "mdi:timer-sand"
@@ -436,25 +399,18 @@ class EasyCareBoostRemainingSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], Se
 
     @property
     def native_value(self) -> str | None:
-        if self.coordinator.data is None or self.coordinator.data.pool_status is None:
-            # Fallback : temps restant de la voie pompe (sans distinction boost/manuel)
-            if self.coordinator.data is not None:
-                pump = self.coordinator.data.get_input(BPC_INDEX_PUMP)
-                return pump.remaining_time if pump else None
+        if self.coordinator.data is None:
             return None
+        if self.coordinator.data.pool_status is None:
+            pump = self.coordinator.data.get_input(BPC_INDEX_PUMP)
+            return pump.remaining_time if pump else None
         return self.coordinator.data.pool_status.boost_remaining_time
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         if self.coordinator.data is None or self.coordinator.data.pool_status is None:
             return {}
-        ps = self.coordinator.data.pool_status
-        return {"boost_active": ps.is_boosting}
-
-
-# ═════════════════════════════════════════════════════════════════════════════
-# SENSORS LR-PR (pression filtration) — optionnel
-# ═════════════════════════════════════════════════════════════════════════════
+        return {"boost_active": self.coordinator.data.pool_status.is_boosting}
 
 
 class EasyCarePressureSensor(EasyCarePressureEntity[EasyCareUserCoordinator], SensorEntity):
@@ -483,13 +439,8 @@ class EasyCarePressureSensor(EasyCarePressureEntity[EasyCareUserCoordinator], Se
         return {"last_measured": date_val.isoformat() if date_val else None}
 
 
-# ═════════════════════════════════════════════════════════════════════════════
-# SENSORS WATBOX — méta (propriétaire, modèle piscine)
-# ═════════════════════════════════════════════════════════════════════════════
-
-
 class EasyCareOwnerSensor(EasyCareWATBOXEntity[EasyCareUserCoordinator], SensorEntity):
-    """Nom du propriétaire du compte Waterair (info diagnostic)."""
+    """Nom du propriétaire du compte Waterair."""
 
     _attr_translation_key = "owner"
     _attr_icon = "mdi:account"
@@ -516,7 +467,7 @@ class EasyCareOwnerSensor(EasyCareWATBOXEntity[EasyCareUserCoordinator], SensorE
 
 
 class EasyCareDetailSensor(EasyCareWATBOXEntity[EasyCareUserCoordinator], SensorEntity):
-    """Modèle et caractéristiques de la piscine (info diagnostic)."""
+    """Modèle et caractéristiques de la piscine."""
 
     _attr_translation_key = "detail"
     _attr_icon = "mdi:pool"

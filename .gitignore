@@ -42,3 +42,6 @@ desktop.ini
 *.zip
 *.xapk
 *.apk
+
+# Claude Code
+CLAUDE.md
