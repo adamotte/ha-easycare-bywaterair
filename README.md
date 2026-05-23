@@ -14,9 +14,10 @@ Intégration Home Assistant pour les piscines équipées de l'écosystème
 - 📊 Pression de filtration (si capteur LR-PR présent)
 - 🔔 Notifications et traitements en cours
 - ⚙️ Mode de filtration actuel et compteurs de la pompe
+- 💡 **Mode des lumières** : AUTO / MANUEL / ETEINT / PAUSE (avec plages horaires et durée de pause en attributs)
 
 ### Pilotage
-- 💡 **Lumières** : projecteur (spot) et éclairage des marches (escalight)
+- 💡 **Lumières** : projecteur (spot) et éclairage des marches (escalight) — allumage MANUEL (1h à 6h max)
 - 💧 **Pompe de filtration** : marche/arrêt
 - 🔄 **Mode de filtration** : AUTO (-2h / standard / +2h) / Marche forcée / Arrêt
 - ⚡ **Boost** : 4h / 12h / 24h / 36h / 48h / 72h / annulation
@@ -97,9 +98,14 @@ automation:
 
 - **Mode BOOST avec durée personnalisée** non supporté — les durées disponibles
   sont 4h, 12h, 24h, 36h, 48h et 72h.
-- **Mode PROG (programmation horaire)** : détecté en lecture (capteur
+- **Mode PROG de la pompe (programmation horaire)** : détecté en lecture (capteur
   `filtration_mode`), mais pas proposé comme option dans le sélecteur.
   La configuration des plages horaires reste dans l'app mobile.
+- **Modes AUTO et PAUSE des lumières** : visibles en lecture (capteurs `spot_mode`
+  et `escalight_mode`) mais non modifiables depuis HA. La configuration des plages
+  horaires (AUTO) et la durée de suspension (PAUSE, 1–15 jours) restent dans
+  l'app mobile. Seul le mode MANUEL (allumage forcé 1h–6h) est pilotable via
+  `light.turn_on`.
 
 ## 🐛 Debug
 
