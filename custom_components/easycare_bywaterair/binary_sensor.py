@@ -1,11 +1,7 @@
 """Plateforme binary_sensor pour Easy-care by Waterair.
 
 Expose le statut de connexion à l'API Waterair :
-  - "Connecté"     : le dernier refresh a réussi
-  - "Déconnecté"   : le dernier refresh a échoué (réseau, serveur, etc.)
-
-Reproduit le binary_sensor du plugin existant (parité fonctionnelle).
-Rattaché à l'appareil WATBOX dans le Device Registry.
+  - binary_sensor.easycare_bywaterair_connection (sur l'appareil WATBOX)
 """
 
 from __future__ import annotations
@@ -41,28 +37,17 @@ class EasyCareConnectionBinarySensor(
 ):
     """Statut de connexion à l'API Waterair.
 
-    On utilise le coordinator des modules comme baromètre — s'il arrive à
-    rafraîchir la liste des modules, c'est qu'on est connecté. On pourrait
-    aussi utiliser n'importe lequel des 3 coordinators, le plus rapide à
-    se synchroniser est le bon choix.
+    Utilise le coordinator des modules comme indicateur : si le dernier
+    refresh a réussi, la connexion est active.
     """
 
     _attr_translation_key = "connection"
     _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
 
-    def __init__(
-        self,
-        coordinator: EasyCareModulesCoordinator,
-        entry: ConfigEntry,
-    ) -> None:
-        """Initialise le binary_sensor de connexion."""
+    def __init__(self, coordinator: EasyCareModulesCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator, entry, unique_id_suffix="connection")
 
     @property
     def is_on(self) -> bool:
-        """Vrai si le dernier refresh du coordinator a réussi.
-
-        `last_update_success` est un attribut standard du DataUpdateCoordinator
-        HA, mis à jour automatiquement après chaque tentative de refresh.
-        """
+        """Vrai si le dernier refresh du coordinator a réussi."""
         return self.coordinator.last_update_success

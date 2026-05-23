@@ -38,15 +38,6 @@
     "button": {
       "refresh": {
         "name": "Refresh data"
-      },
-      "boost_12h": {
-        "name": "Boost 12h"
-      },
-      "boost_24h": {
-        "name": "Boost 24h"
-      },
-      "cancel_boost": {
-        "name": "Cancel boost"
       }
     },
     "light": {
@@ -73,8 +64,7 @@
           "AUTO": "Auto (temperature)",
           "AUTO+2H": "Auto +2h (temperature)",
           "CONTINUOUS": "On (continuous)",
-          "MANUAL": "Off (manual)",
-          "PROG": "Scheduled"
+          "MANUAL": "Off (manual)"
         }
       }
     },
@@ -125,17 +115,17 @@
       "fields": {
         "mode": {
           "name": "Mode",
-          "description": "AUTO, CONTINUOUS, MANUAL or PROG."
+          "description": "AUTO, CONTINUOUS or MANUAL."
         }
       }
     },
     "start_boost": {
       "name": "Start boost",
-      "description": "Start a 12h or 24h filtration boost.",
+      "description": "Start a filtration boost.",
       "fields": {
         "duration": {
           "name": "Duration",
-          "description": "BOOST12H or BOOST24H."
+          "description": "BOOST4H, BOOST12H, BOOST24H, BOOST36H, BOOST48H or BOOST72H."
         }
       }
     },

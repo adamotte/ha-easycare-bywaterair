@@ -3,14 +3,7 @@
 Expose le switch de la pompe de filtration :
   - switch.easycare_bywaterair_pump
 
-Permet le contrôle ON/OFF immédiat de la pompe via l'API BPC manual,
-comme le bouton 'ON'/'OFF' dans l'app Waterair.
-
-L'état est lu depuis le coordinator BPC :
-  - bpc_inputs[0] = voie pompe
-  - is_on = (remaining_time != "00:00")
-
-Pour des modes plus avancés (AUTO, PROG), utilisez select.easycare_bywaterair_filtration_mode.
+Pour des modes plus avancés (AUTO, CONTINUOUS), utilisez select.easycare_bywaterair_filtration_mode.
 """
 
 from __future__ import annotations
@@ -61,7 +54,7 @@ class EasyCarePumpSwitch(
 
     @property
     def is_on(self) -> bool | None:
-        """Vrai si la pompe est active (temps restant > 00:00)."""
+        """Vrai si la pompe est active."""
         if self.coordinator.data is None:
             return None
         pump = self.coordinator.data.get_input(BPC_INDEX_PUMP)
@@ -69,15 +62,14 @@ class EasyCarePumpSwitch(
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Attributs : temps restant + mode filtration courant."""
+        """Attributs : temps restant et mode de filtration courant."""
         attrs: dict[str, Any] = {}
         if self.coordinator.data is None:
             return attrs
         pump = self.coordinator.data.get_input(BPC_INDEX_PUMP)
         if pump is not None:
             attrs["remaining_time"] = pump.remaining_time
-        if self.coordinator.data.pool_status is not None:
-            attrs["mode"] = self.coordinator.data.pool_status.mode
+        attrs["filtration_mode"] = self.coordinator.data.filtration_mode
         return attrs
 
     async def async_turn_on(self, **kwargs: Any) -> None:
@@ -97,7 +89,7 @@ class EasyCarePumpSwitch(
             _LOGGER.error("Pompe : WATBOX ou BPC introuvable")
             return
 
-        client = coords.user._client  # noqa: SLF001 — accès interne légitime
+        client = coords.user._client  # noqa: SLF001
         _LOGGER.info("Pompe : commande %s (durée=%dm)", action.upper(), duration_minutes)
 
         await client.set_bpc_manual(

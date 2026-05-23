@@ -1,9 +1,7 @@
 """Plateforme button pour Easy-care by Waterair.
 
-Expose un seul bouton :
+Expose un bouton de rafraîchissement manuel des données :
   - button.easycare_bywaterair_refresh  (sur l'appareil WATBOX)
-
-Le contrôle du boost est géré par select.easycare_bywaterair_boost.
 """
 
 from __future__ import annotations
@@ -32,11 +30,6 @@ async def async_setup_entry(
     async_add_entities([EasyCareRefreshButton(coords.modules, entry)])
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Bouton refresh — sur WATBOX
-# ─────────────────────────────────────────────────────────────────────────────
-
-
 class EasyCareRefreshButton(
     EasyCareWATBOXEntity[EasyCareModulesCoordinator],
     ButtonEntity,
@@ -60,6 +53,3 @@ class EasyCareRefreshButton(
             coords.modules.async_request_refresh(),
             coords.bpc.async_request_immediate_refresh(),
         )
-
-
-

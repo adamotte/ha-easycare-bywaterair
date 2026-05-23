@@ -1,19 +1,6 @@
 """Plateforme select pour Easy-care by Waterair.
 
-Expose le sélecteur du mode de filtration :
-  - select.easycare_bywaterair_filtration_mode
-
-Options disponibles (confirmées dans l'APK) :
-  - AUTO-2H    : durée automatique -2h (adaptOffset = -60 min)
-  - AUTO       : durée automatique selon la température (adaptOffset = 0)
-  - AUTO+2H    : durée automatique +2h (adaptOffset = +60 min)
-  - CONTINUOUS : marche forcée (équivalent du 'ON' dans l'app mobile)
-  - MANUAL     : arrêt forcé (équivalent du 'OFF' dans l'app mobile)
-  - PROG       : programmation horaire utilisateur
-
-L'état courant est dérivé de (pool_status.mode, bpc_data.adapt_offset).
-Le changement de mode appelle set_filtration_mode_with_offset() qui effectue
-1 ou 2 appels API : setStatusCommandToSend + (si AUTO) les programmes BPC.
+Expose les sélecteurs du mode de filtration et du boost de filtration.
 """
 
 from __future__ import annotations
@@ -28,13 +15,13 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import (
     ADAPT_OFFSET_MINUS,
     ADAPT_OFFSET_PLUS,
-    BOOST_CANCEL,
     BOOST_MODES,
     DOMAIN,
     FILTRATION_MODES_WITH_OFFSET,
     MODE_AUTO,
     MODE_AUTO_MINUS,
     MODE_AUTO_PLUS,
+    MODE_PROG,
 )
 from .coordinator import EasyCareBPCCoordinator, EasyCareCoordinators
 from .entity import EasyCareBPCEntity
@@ -63,16 +50,16 @@ class EasyCareFiltrationModeSelect(
 ):
     """Sélecteur du mode de filtration.
 
-    6 options (depuis v0.1.14) :
+    Options disponibles :
       - AUTO-2H    : mode AUTO avec offset -2h (adaptOffset = -60 min)
       - AUTO       : mode AUTO standard (adaptOffset = 0)
       - AUTO+2H    : mode AUTO avec offset +2h (adaptOffset = +60 min)
       - CONTINUOUS : marche forcée
       - MANUAL     : arrêt forcé
-      - PROG       : programmation horaire
 
-    Les labels lisibles sont gérés par les fichiers de traduction
-    (`translations/fr.json` et `en.json`).
+    Le mode PROG est détecté en lecture (capteur filtration_mode) mais n'est
+    pas proposé en écriture — le sélecteur affiche alors aucune option active.
+    Les labels lisibles sont gérés par les fichiers de traduction.
     """
 
     _attr_translation_key = "filtration_mode"
@@ -86,20 +73,15 @@ class EasyCareFiltrationModeSelect(
     def current_option(self) -> str | None:
         """Mode courant dérivé de (filtration_mode, adapt_offset).
 
-        filtration_mode vient des programmes BPC (endpoint programs),
-        qui reflète la configuration réelle — pas le champ `origin` du
-        tableau `pool` (qui encode le mode de déclenchement, pas le mode config).
-
-        Mapping :
-          - mode=AUTO + offset=-60 → AUTO-2H
-          - mode=AUTO + offset=0   → AUTO
-          - mode=AUTO + offset=+60 → AUTO+2H
-          - mode=CONTINUOUS/MANUAL/PROG → inchangé
+        Retourne None si le mode est PROG (non sélectionnable).
         """
         if self.coordinator.data is None:
             return None
         mode = self.coordinator.data.filtration_mode
         if mode is None:
+            return None
+
+        if mode == MODE_PROG:
             return None
 
         if mode == MODE_AUTO:
@@ -108,12 +90,12 @@ class EasyCareFiltrationModeSelect(
                 return MODE_AUTO_MINUS
             if offset == ADAPT_OFFSET_PLUS:
                 return MODE_AUTO_PLUS
-            return MODE_AUTO  # offset=0 ou valeur inconnue → AUTO standard
+            return MODE_AUTO
 
-        return mode  # CONTINUOUS, MANUAL, PROG
+        return mode
 
     async def async_select_option(self, option: str) -> None:
-        """Change le mode de filtration (avec offset AUTO si nécessaire)."""
+        """Change le mode de filtration."""
         if option not in FILTRATION_MODES_WITH_OFFSET:
             _LOGGER.error("Mode invalide demandé : %s", option)
             return
@@ -123,17 +105,11 @@ class EasyCareFiltrationModeSelect(
 
         _LOGGER.info("Changement mode filtration → %s", option)
         await client.set_filtration_mode_with_offset(option)
-
-        # Refresh immédiat pour voir la prise en compte
         await self.coordinator.async_request_immediate_refresh()
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Select boost — démarre / annule / montre le boost en cours
-# ─────────────────────────────────────────────────────────────────────────────
-
 _BOOST_OFF = "off"
-_BOOST_ACTIVE = "active"   # état lecture seule : boost en cours, durée indéterminée
+_BOOST_ACTIVE = "active"
 _BOOST_OPTIONS = [_BOOST_OFF, _BOOST_ACTIVE] + list(BOOST_MODES)
 
 
@@ -142,9 +118,7 @@ class EasyCareBoostSelect(EasyCareBPCEntity[EasyCareBPCCoordinator], SelectEntit
 
     - Sélectionner une durée démarre le boost correspondant.
     - Sélectionner « off » annule le boost en cours.
-    - Quand un boost tourne, l'état affiche « active » avec le temps restant
-      en attribut. L'API ne retourne pas la durée initiale du boost, seulement
-      le temps restant — on ne peut donc pas retrouver le mode d'origine.
+    - Quand un boost tourne, l'état affiche « active » avec le temps restant en attribut.
     """
 
     _attr_translation_key = "boost"
@@ -180,7 +154,6 @@ class EasyCareBoostSelect(EasyCareBPCEntity[EasyCareBPCCoordinator], SelectEntit
         client = coords.user._client  # noqa: SLF001
 
         if option in (_BOOST_OFF, _BOOST_ACTIVE):
-            # 'off' annule le boost ; 'active' est un état lecture seule → cancel aussi
             _LOGGER.info("Annulation boost")
             await client.cancel_boost()
         else:

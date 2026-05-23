@@ -1,20 +1,12 @@
 """Plateforme number pour Easy-care by Waterair.
 
-Expose les durées configurables des voies BPC :
+Expose les durées configurables des voies lumineuses BPC :
   - number.easycare_bywaterair_spot_duration       : durée du spot en heures
   - number.easycare_bywaterair_escalight_duration  : durée de l'escalight en heures
 
-Ces nombres sont **purement locaux** : ils ne sont pas envoyés au serveur
-Waterair. Ils sont lus par les entités `light` pour savoir combien de temps
-allumer la voie quand on fait `light.turn_on`.
-
-Stockage : les valeurs sont gardées en mémoire dans l'instance et exposées
-comme entités HA. HA persiste automatiquement les états récents (recorder)
-mais pas les valeurs des entités number par défaut. Pour une vraie persistance
-entre redémarrages, on utilise `RestoreEntity` qui restaure la dernière valeur
-connue après un restart HA.
-
-Plage : 1 à 24 heures, par pas de 0.5h (30 min).
+Ces valeurs sont purement locales (non envoyées au serveur) et lues par les
+entités light lors du `light.turn_on`. La persistance entre redémarrages HA
+est assurée par RestoreEntity. Plage : 1 à 24 heures, par pas de 0.5h.
 """
 
 from __future__ import annotations
@@ -40,12 +32,7 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Configure les entités number depuis un ConfigEntry.
-
-    On crée une entité number pour chaque lumière disponible :
-      - spot_duration si numberOfInputs >= 1
-      - escalight_duration si numberOfInputs >= 2
-    """
+    """Configure les entités number depuis un ConfigEntry."""
     coordinators: EasyCareCoordinators = hass.data[DOMAIN][entry.entry_id]
     bpc = coordinators.modules.get_bpc()
 
@@ -63,33 +50,21 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Classe de base pour les durées
-# ─────────────────────────────────────────────────────────────────────────────
-
-
 class EasyCareDurationNumberBase(
     EasyCareBPCEntity[EasyCareModulesCoordinator],
     NumberEntity,
     RestoreEntity,
 ):
-    """Base pour une entité number qui mémorise une durée locale.
+    """Base pour une entité number mémorisant une durée locale.
 
-    Hérite de :
-      - EasyCareBPCEntity : rattachement au device BPC
-      - NumberEntity      : entité HA de type number
-      - RestoreEntity     : restauration de la valeur après redémarrage HA
-
-    Les sous-classes doivent définir :
-      - `_attr_translation_key` : pour l'i18n du nom
-      - `unique_id_suffix` : identifiant unique
+    Hérite de RestoreEntity pour restaurer la valeur après redémarrage HA.
     """
 
     _attr_native_min_value = 1.0
     _attr_native_max_value = 24.0
     _attr_native_step = 0.5
     _attr_native_unit_of_measurement = UnitOfTime.HOURS
-    _attr_mode = NumberMode.BOX  # saisie directe plutôt qu'un slider
+    _attr_mode = NumberMode.BOX
     _attr_icon = "mdi:timer-outline"
 
     def __init__(
@@ -99,7 +74,6 @@ class EasyCareDurationNumberBase(
         unique_id_suffix: str,
     ) -> None:
         super().__init__(coordinator, entry, unique_id_suffix)
-        # Valeur par défaut tant qu'on n'a pas restauré
         self._attr_native_value = float(DEFAULT_DURATION_LIGHT_HOURS)
 
     async def async_added_to_hass(self) -> None:
@@ -111,27 +85,18 @@ class EasyCareDurationNumberBase(
         ):
             try:
                 self._attr_native_value = float(last_state.state)
-                _LOGGER.debug(
-                    "%s : durée restaurée à %.1fh",
-                    self.unique_id, self._attr_native_value,
-                )
+                _LOGGER.debug("%s : durée restaurée à %.1fh", self.unique_id, self._attr_native_value)
             except (ValueError, TypeError):
                 _LOGGER.warning(
-                    "Impossible de restaurer la durée %s (valeur=%r), "
-                    "utilisation du défaut",
+                    "Impossible de restaurer la durée %s (valeur=%r), utilisation du défaut",
                     self.unique_id, last_state.state,
                 )
 
     async def async_set_native_value(self, value: float) -> None:
-        """Sauvegarde la nouvelle valeur (gardée en mémoire + recorder HA)."""
+        """Sauvegarde la nouvelle valeur."""
         self._attr_native_value = float(value)
         self.async_write_ha_state()
         _LOGGER.debug("%s : nouvelle durée %.1fh", self.unique_id, value)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Sous-classes
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 class EasyCareSpotDurationNumber(EasyCareDurationNumberBase):
@@ -139,11 +104,7 @@ class EasyCareSpotDurationNumber(EasyCareDurationNumberBase):
 
     _attr_translation_key = "spot_duration"
 
-    def __init__(
-        self,
-        coordinator: EasyCareModulesCoordinator,
-        entry: ConfigEntry,
-    ) -> None:
+    def __init__(self, coordinator: EasyCareModulesCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator, entry, unique_id_suffix="spot_duration")
 
 
@@ -152,9 +113,5 @@ class EasyCareEscalightDurationNumber(EasyCareDurationNumberBase):
 
     _attr_translation_key = "escalight_duration"
 
-    def __init__(
-        self,
-        coordinator: EasyCareModulesCoordinator,
-        entry: ConfigEntry,
-    ) -> None:
+    def __init__(self, coordinator: EasyCareModulesCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator, entry, unique_id_suffix="escalight_duration")
