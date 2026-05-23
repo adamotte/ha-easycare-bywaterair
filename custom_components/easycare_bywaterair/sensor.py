@@ -16,7 +16,9 @@ Expose tous les capteurs en lecture seule, répartis sur 4 appareils :
   ├── sensor.easycare_bywaterair_pump_total_runtime
   ├── sensor.easycare_bywaterair_pump_counter_date
   ├── sensor.easycare_bywaterair_pump_daily_runtime
-  └── sensor.easycare_bywaterair_boost_remaining
+  ├── sensor.easycare_bywaterair_boost_remaining
+  ├── sensor.easycare_bywaterair_spot_mode       (si voie 1 présente)
+  └── sensor.easycare_bywaterair_escalight_mode  (si voie 2 présente)
 
   Appareil LR-PR (si présent) — coordinator USER
   └── sensor.easycare_bywaterair_pressure        (pression filtration)
@@ -90,7 +92,8 @@ async def async_setup_entry(
             EasyCareAC1BatterySensor(coords.modules, entry),
         ])
 
-    if coords.modules.get_bpc() is not None:
+    bpc = coords.modules.get_bpc()
+    if bpc is not None:
         sensors.extend([
             EasyCarePumpStateSensor(coords.bpc, entry),
             EasyCareFiltrationModeSensor(coords.bpc, entry),
@@ -99,6 +102,11 @@ async def async_setup_entry(
             EasyCarePumpDailyRuntimeSensor(coords.bpc, entry),
             EasyCareBoostRemainingSensor(coords.bpc, entry),
         ])
+        n = bpc.number_of_inputs
+        if n >= 1:
+            sensors.append(EasyCareSpotModeSensor(coords.bpc, entry))
+        if n >= 2:
+            sensors.append(EasyCareEscalightModeSensor(coords.bpc, entry))
 
     if coords.modules.get_modules_by_type(MODULE_TYPE_PRESSURE):
         sensors.append(EasyCarePressureSensor(coords.user, entry))
@@ -493,3 +501,92 @@ class EasyCareDetailSensor(EasyCareWATBOXEntity[EasyCareUserCoordinator], Sensor
             "latitude": p.latitude,
             "longitude": p.longitude,
         }
+
+
+def _derive_light_mode(program: dict | None) -> str | None:
+    """Dérive le mode textuel d'une lumière depuis son programCharacteristics brut.
+
+    Mapping défensif — les noms de champs sont supposés d'après le SDK Solem
+    et seront ajustés si l'API retourne des noms différents.
+
+    Returns:
+        "AUTO", "MANUEL", "ETEINT", "PAUSE", ou None si program est None.
+    """
+    if program is None:
+        return None
+    pause = int(program.get("pauseDuration", 0) or 0)
+    if pause > 0:
+        return "PAUSE"
+    mode = int(program.get("mode", -1) or -1)
+    if mode == 2:
+        return "AUTO"
+    if mode == 1:
+        return "MANUEL"
+    if mode == 0:
+        return "ETEINT"
+    return None
+
+
+def _light_mode_attributes(program: dict | None) -> dict[str, Any]:
+    """Construit les attributs extra d'un capteur mode lumière."""
+    if program is None:
+        return {}
+    pause = int(program.get("pauseDuration", 0) or 0)
+    if pause > 0:
+        return {"pause_days": pause}
+    mode = int(program.get("mode", -1) or -1)
+    if mode == 2:
+        return {
+            "slots": program.get("slots") or [],
+            "pause_days": 0,
+        }
+    if mode in (0, 1):
+        manual_secs = int(program.get("manualDuration", 0) or 0)
+        return {"manual_duration_hours": round(manual_secs / 3600, 2)}
+    return {}
+
+
+class EasyCareSpotModeSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], SensorEntity):
+    """Mode configuré du projecteur principal (AUTO / MANUEL / ETEINT / PAUSE)."""
+
+    _attr_translation_key = "spot_mode"
+    _attr_icon = "mdi:spotlight"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator: EasyCareBPCCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry, unique_id_suffix="spot_mode")
+
+    @property
+    def native_value(self) -> str | None:
+        if self.coordinator.data is None:
+            return None
+        return _derive_light_mode(self.coordinator.data.spot_program)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        if self.coordinator.data is None:
+            return {}
+        return _light_mode_attributes(self.coordinator.data.spot_program)
+
+
+class EasyCareEscalightModeSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], SensorEntity):
+    """Mode configuré de l'éclairage des marches (AUTO / MANUEL / ETEINT / PAUSE)."""
+
+    _attr_translation_key = "escalight_mode"
+    _attr_icon = "mdi:stairs"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator: EasyCareBPCCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry, unique_id_suffix="escalight_mode")
+
+    @property
+    def native_value(self) -> str | None:
+        if self.coordinator.data is None:
+            return None
+        return _derive_light_mode(self.coordinator.data.escalight_program)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        if self.coordinator.data is None:
+            return {}
+        return _light_mode_attributes(self.coordinator.data.escalight_program)

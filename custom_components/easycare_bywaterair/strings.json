@@ -85,6 +85,8 @@
       "pump_counter_date": {"name": "Counter reference date"},
       "pump_daily_runtime": {"name": "Pump runtime today"},
       "boost_remaining": {"name": "Boost remaining"},
+      "spot_mode": {"name": "Spotlight mode"},
+      "escalight_mode": {"name": "Step lighting mode"},
       "owner": {"name": "Account owner"},
       "detail": {"name": "Pool model"}
     },
