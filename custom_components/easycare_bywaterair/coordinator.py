@@ -228,6 +228,10 @@ class EasyCareBPCCoordinator(DataUpdateCoordinator[BPCData]):
 
         self._last_real_update = datetime.now(tz=timezone.utc)
         pool_status = _pool_status_from_inputs(inputs)
+        try:
+            pool_status = await self._client.get_pool_status()
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("get_pool_status ignoré (non-fatal) : %s", err)
 
         filtration_mode: str | None = None
         adapt_offset = 0
