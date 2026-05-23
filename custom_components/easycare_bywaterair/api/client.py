@@ -354,22 +354,29 @@ class EasyCareClient:
         )
         return PoolStatus.from_api(data)
 
-    async def get_bpc_adapt_offset(self) -> int:
-        """Lit l'adaptOffset du programme pompe (index 0) depuis les programmes BPC.
+    async def get_bpc_programs_data(self) -> tuple[str | None, int]:
+        """Lit le mode de filtration et l'adaptOffset depuis les programmes BPC.
 
         Endpoint : GET /api/module/{watbox_serial}/programs/{bpc_name}
 
-        L'adaptOffset est stocké dans `programCharacteristics.adaptOffset` du
-        programme à index 0 (pompe). Confirmé APK : PoolProgram.jsonIJCDecode()
-        lit depuis `jSONObject2.optInt("adaptOffset", 0)` (jSONObject2 = programCharacteristics).
+        Le mode de filtration est dérivé de `programCharacteristics` du programme
+        à index 0 (pompe) — confirmé APK (MergedPoolFragment.java) :
+          mode=0 (off)                       → "MANUAL"
+          mode=1 (on)                        → "CONTINUOUS"
+          mode=2 (auto) + rule=1 (temp)      → "AUTO"
+          mode=2 (auto) + rule=0 (time)/autre → "PROG"
+
+        L'adaptOffset est également dans programCharacteristics :
+          -60 → AUTO-2H, 0 → AUTO standard, +60 → AUTO+2H.
 
         Returns:
-            adaptOffset en minutes : -60 (-2h), 0 (standard), +60 (+2h).
-            Retourne 0 si les modules ne sont pas disponibles ou si le programme
-            pompe est absent.
+            Tuple (filtration_mode, adapt_offset).
+            filtration_mode est None si les modules ne sont pas disponibles
+            ou si le programme pompe est absent.
+            adapt_offset est 0 par défaut.
         """
         if self._watbox is None or self._bpc is None:
-            return 0
+            return None, 0
 
         path = API_PATH_BPC_PROGRAMS.format(
             watbox_serial=self._watbox.serial_number,
@@ -380,8 +387,19 @@ class EasyCareClient:
         for prog in programs:
             if prog.get("index") == 0:
                 charac = prog.get("programCharacteristics") or {}
-                return int(charac.get("adaptOffset", 0) or 0)
-        return 0
+                prog_mode = int(charac.get("mode", 0) or 0)
+                prog_rule = int(charac.get("rule", 0) or 0)
+                adapt_offset = int(charac.get("adaptOffset", 0) or 0)
+                if prog_mode == 0:
+                    filtration_mode: str | None = "MANUAL"
+                elif prog_mode == 1:
+                    filtration_mode = "CONTINUOUS"
+                elif prog_mode == 2 and prog_rule == 1:
+                    filtration_mode = "AUTO"
+                else:  # mode=2 + rule=0 (time), ou valeur inconnue
+                    filtration_mode = "PROG"
+                return filtration_mode, adapt_offset
+        return None, 0
 
     # ════════════════════════════════════════════════════════════════════════
     # MÉTHODES PUBLIQUES — COMMANDES (ÉCRITURE)

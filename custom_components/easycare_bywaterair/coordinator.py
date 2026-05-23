@@ -97,12 +97,14 @@ class BPCData:
     de filtration. Les données sont récupérées à chaque cycle réel.
 
     pool_status peut être None si la dérivation BPC échoue (pompe absente).
+    filtration_mode est le mode dérivé des programmes BPC (AUTO/CONTINUOUS/MANUAL/PROG).
     adapt_offset est l'offset AUTO (en minutes) lu depuis les programmes BPC :
       -60 → AUTO-2H, 0 → AUTO standard, +60 → AUTO+2H.
     """
 
     inputs: tuple[BPCInput, ...]
     pool_status: PoolStatus | None = None
+    filtration_mode: str | None = None
     adapt_offset: int = 0
 
     def get_input(self, index: int) -> BPCInput | None:
@@ -285,27 +287,19 @@ class EasyCareModulesCoordinator(DataUpdateCoordinator[tuple[Module, ...]]):
         return tuple(m for m in self.data if m.type == module_type)
 
 
-# Mapping origin (voie pompe) → mode de filtration.
-# Confirmé par reverse-engineering de l'APK :
-#   origin=3 + info=['boost'] → boost actif (pas un mode filtration persistent)
-# Les valeurs 0/1/2 sont une hypothèse à confirmer sur données réelles.
-_ORIGIN_TO_FILTRATION_MODE: dict[int, str] = {
-    0: "AUTO",
-    1: "PROG",
-    2: "CONTINUOUS",
-    # 3 = déclenchement manuel (boost ou commande manuelle) → pas un mode persistent
-}
-
-
 def _pool_status_from_inputs(inputs: tuple[BPCInput, ...]) -> PoolStatus | None:
     """Construit un PoolStatus depuis les voies BPC, sans appel réseau.
 
-    La source de vérité pour l'état de filtration est la voie pompe (index 0)
-    du tableau `pool` de la réponse BPC :
+    La source de vérité pour l'état ON/OFF de la pompe et le boost est la
+    voie pompe (index 0) du tableau `pool` de la réponse BPC :
       - value=1/0        : pompe ON/OFF
       - info=['boost']   : boost actif
       - time='HH:MM'     : temps restant (boost ou commande manuelle)
-      - origin=0/1/2/3   : mode de déclenchement
+
+    Note : le mode de filtration (AUTO/CONTINUOUS/MANUAL/PROG) n'est PAS
+    dans le tableau BPC — il vient des programmes BPC (endpoint programs).
+    Le champ `mode` est donc laissé à None ici ; il est renseigné via
+    BPCData.filtration_mode par le coordinator.
 
     Returns:
         PoolStatus dérivé, ou None si la voie pompe est absente.
@@ -314,13 +308,8 @@ def _pool_status_from_inputs(inputs: tuple[BPCInput, ...]) -> PoolStatus | None:
     if pump is None:
         return None
 
-    # Mode filtration depuis origin (quand pas en boost)
-    mode: str | None = None
-    if not pump.is_boosting and pump.origin is not None:
-        mode = _ORIGIN_TO_FILTRATION_MODE.get(pump.origin)
-
     return PoolStatus(
-        mode=mode,
+        mode=None,  # lu depuis les programmes BPC — cf. BPCData.filtration_mode
         power_state="on" if pump.is_on else "off",
         boost_remaining_time=pump.remaining_time if pump.is_boosting else "00:00",
         is_pool_power=pump.is_on,
@@ -426,27 +415,33 @@ class EasyCareBPCCoordinator(DataUpdateCoordinator[BPCData]):
         # `pool` de la réponse BPC.
         pool_status = _pool_status_from_inputs(inputs)
 
-        # Lecture de l'adaptOffset (offset AUTO -2h/standard/+2h)
+        # Lecture du mode de filtration et de l'adaptOffset depuis les programmes BPC.
         # Non critique : un échec ne doit pas bloquer le coordinator principal.
+        filtration_mode: str | None = None
         adapt_offset = 0
         try:
-            adapt_offset = await self._client.get_bpc_adapt_offset()
+            filtration_mode, adapt_offset = await self._client.get_bpc_programs_data()
         except Exception as err:  # noqa: BLE001
             _LOGGER.debug(
-                "get_bpc_adapt_offset ignoré (non-fatal) : %s", err
+                "get_bpc_programs_data ignoré (non-fatal) : %s", err
             )
-            # On garde 0 comme valeur par défaut — l'affichage du mode AUTO
-            # sera "AUTO standard" jusqu'au prochain cycle.
+            # On garde None/0 comme valeurs par défaut.
 
         _LOGGER.debug(
-            "BPC update OK : %d voie(s), active=%s, boost=%s, adaptOffset=%d",
+            "BPC update OK : %d voie(s), active=%s, boost=%s, mode=%s, adaptOffset=%d",
             len(inputs),
             [inp.index for inp in inputs if inp.is_on],
             pool_status.is_boosting if pool_status else False,
+            filtration_mode,
             adapt_offset,
         )
 
-        return BPCData(inputs=inputs, pool_status=pool_status, adapt_offset=adapt_offset)
+        return BPCData(
+            inputs=inputs,
+            pool_status=pool_status,
+            filtration_mode=filtration_mode,
+            adapt_offset=adapt_offset,
+        )
 
     def _should_skip_cycle(self) -> bool:
         """Détermine s'il faut sauter ce cycle de polling.
