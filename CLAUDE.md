@@ -71,14 +71,25 @@ Entities are only created if the corresponding module is present in the modules 
 ### BPC manual commands require two API calls
 
 Sending a pump/light command (`switch.py`, `light.py`) always calls:
-1. `POST /api/module/{watbox}/manual/{bpc}` — send the command
-2. `POST /api/reportManualCommandSent` with `{"moduleId": bpc.id}` — confirm the command (mandatory second step, discovered from APK)
+1. `POST /api/module/{watbox}/manual/{bpc}` with `{"pool": {"index": N, "action": 2, "manualDuration": D}}` — send the command
+2. `POST /api/reportManualCommandSent` with `{"id": bpc.id, "command": {"pool": {"index": N, "action": 2, "manualDuration": D}}, "route": "http"}` — confirm the command (mandatory second step)
 
 Missing step 2 leaves the command un-acknowledged on the server side.
 
-### Filtration mode / boost commands require moduleId
+### Filtration mode / boost commands — confirmed payload structure (APK)
 
-`POST /api/setStatusCommandToSend` requires `{"mode": "...", "moduleId": bpc.id}`. The BPC MongoDB ObjectId (`bpc.id`) is cached in `EasyCareClient._bpc_module_id` after the first `get_bpc_status()` call and injected automatically into all command payloads.
+`POST /api/setStatusCommandToSend` requires this exact envelope (confirmed from Solem SDK source,
+`Networking.java` + `NetworkingModule.java`):
+
+```json
+{"id": "<bpc_ijc_id>", "command": {"mode": "AUTO"}, "wakeUp": false}
+```
+
+- `"id"` = `bpc.id` = `Module.id` = champ `"id"` (sans underscore) de la réponse API module = `ManufacturerData.mIDIJC` côté Solem SDK
+- `"command"` = objet JSON passé au SDK ; `"mode"` = chaîne (AUTO/CONTINUOUS/MANUAL/PROG/BOOST12H/etc.)
+- `"wakeUp"` = false pour le BPC WiFi (pas de réveil SMS)
+
+`bpc.id` est mis en cache dans `EasyCareClient._bpc_module_id` après le premier `get_bpc_status()`.
 
 ### BPC input indices (from APK analysis)
 
