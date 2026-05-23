@@ -69,7 +69,9 @@
       "filtration_mode": {
         "name": "Filtration mode",
         "state": {
-          "AUTO": "Auto (by temperature)",
+          "AUTO-2H": "Auto -2h (temperature)",
+          "AUTO": "Auto (temperature)",
+          "AUTO+2H": "Auto +2h (temperature)",
           "CONTINUOUS": "On (continuous)",
           "MANUAL": "Off (manual)",
           "PROG": "Scheduled"

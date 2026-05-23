@@ -4,13 +4,16 @@ Expose le sélecteur du mode de filtration :
   - select.easycare_bywaterair_filtration_mode
 
 Options disponibles (confirmées dans l'APK) :
-  - AUTO       : durée automatique selon la température de l'eau
+  - AUTO-2H    : durée automatique -2h (adaptOffset = -60 min)
+  - AUTO       : durée automatique selon la température (adaptOffset = 0)
+  - AUTO+2H    : durée automatique +2h (adaptOffset = +60 min)
   - CONTINUOUS : marche forcée (équivalent du 'ON' dans l'app mobile)
   - MANUAL     : arrêt forcé (équivalent du 'OFF' dans l'app mobile)
   - PROG       : programmation horaire utilisateur
 
-L'état courant est lu depuis le coordinator BPC → pool_status.mode.
-Le changement de mode appelle set_filtration_mode() sur le host Solem.
+L'état courant est dérivé de (pool_status.mode, bpc_data.adapt_offset).
+Le changement de mode appelle set_filtration_mode_with_offset() qui effectue
+1 ou 2 appels API : setStatusCommandToSend + (si AUTO) les programmes BPC.
 """
 
 from __future__ import annotations
@@ -22,7 +25,18 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import BOOST_CANCEL, BOOST_MODES, DOMAIN, FILTRATION_MODES
+from .const import (
+    ADAPT_OFFSET_MINUS,
+    ADAPT_OFFSET_PLUS,
+    BOOST_CANCEL,
+    BOOST_MODES,
+    DOMAIN,
+    FILTRATION_MODES,
+    FILTRATION_MODES_WITH_OFFSET,
+    MODE_AUTO,
+    MODE_AUTO_MINUS,
+    MODE_AUTO_PLUS,
+)
 from .coordinator import EasyCareBPCCoordinator, EasyCareCoordinators
 from .entity import EasyCareBPCEntity
 
@@ -50,36 +64,57 @@ class EasyCareFiltrationModeSelect(
 ):
     """Sélecteur du mode de filtration.
 
-    Les valeurs exposées sont les modes API bruts (AUTO, CONTINUOUS, MANUAL, PROG).
+    6 options (depuis v0.1.14) :
+      - AUTO-2H    : mode AUTO avec offset -2h (adaptOffset = -60 min)
+      - AUTO       : mode AUTO standard (adaptOffset = 0)
+      - AUTO+2H    : mode AUTO avec offset +2h (adaptOffset = +60 min)
+      - CONTINUOUS : marche forcée
+      - MANUAL     : arrêt forcé
+      - PROG       : programmation horaire
+
     Les labels lisibles sont gérés par les fichiers de traduction
     (`translations/fr.json` et `en.json`).
     """
 
     _attr_translation_key = "filtration_mode"
     _attr_icon = "mdi:water-sync"
-    _attr_options = list(FILTRATION_MODES)
+    _attr_options = list(FILTRATION_MODES_WITH_OFFSET)
 
     def __init__(self, coordinator: EasyCareBPCCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator, entry, unique_id_suffix="filtration_mode_select")
 
     @property
     def current_option(self) -> str | None:
-        """Mode courant lu depuis pool_status.
+        """Mode courant dérivé de (pool_status.mode, adapt_offset).
 
-        Si on est dans un mode boost (BOOST12H, BOOST24H), on ne peut pas le
-        mapper à un mode "principal" — on retourne None pour ne pas afficher
-        une option fausse.
+        Mapping :
+          - mode=AUTO + offset=-60 → AUTO-2H
+          - mode=AUTO + offset=0   → AUTO
+          - mode=AUTO + offset=+60 → AUTO+2H
+          - mode=CONTINUOUS/MANUAL/PROG → inchangé
+
+        Si on est dans un mode boost (BOOST12H, etc.), on ne peut pas le
+        mapper à un mode principal — on retourne None.
         """
         if self.coordinator.data is None or self.coordinator.data.pool_status is None:
             return None
         mode = self.coordinator.data.pool_status.mode
-        if mode in FILTRATION_MODES:
-            return mode
-        return None  # mode boost ou inconnu → pas de sélection affichée
+        if mode is None or mode not in FILTRATION_MODES:
+            return None  # mode boost ou inconnu → pas de sélection affichée
+
+        if mode == MODE_AUTO:
+            offset = self.coordinator.data.adapt_offset
+            if offset == ADAPT_OFFSET_MINUS:
+                return MODE_AUTO_MINUS
+            if offset == ADAPT_OFFSET_PLUS:
+                return MODE_AUTO_PLUS
+            return MODE_AUTO  # offset=0 ou valeur inconnue → AUTO standard
+
+        return mode  # CONTINUOUS, MANUAL, PROG
 
     async def async_select_option(self, option: str) -> None:
-        """Change le mode de filtration."""
-        if option not in FILTRATION_MODES:
+        """Change le mode de filtration (avec offset AUTO si nécessaire)."""
+        if option not in FILTRATION_MODES_WITH_OFFSET:
             _LOGGER.error("Mode invalide demandé : %s", option)
             return
 
@@ -87,7 +122,7 @@ class EasyCareFiltrationModeSelect(
         client = coords.user._client  # noqa: SLF001
 
         _LOGGER.info("Changement mode filtration → %s", option)
-        await client.set_filtration_mode(option)
+        await client.set_filtration_mode_with_offset(option)
 
         # Refresh immédiat pour voir la prise en compte
         await self.coordinator.async_request_immediate_refresh()

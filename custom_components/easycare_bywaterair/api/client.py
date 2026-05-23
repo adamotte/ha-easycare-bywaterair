@@ -39,8 +39,12 @@ import aiohttp
 from aiohttp import ClientError
 
 from ..const import (
+    ADAPT_OFFSET_MINUS,
+    ADAPT_OFFSET_NEUTRAL,
+    ADAPT_OFFSET_PLUS,
     API_HOST_EASYCARE,
     API_PATH_BPC_MANUAL,
+    API_PATH_BPC_PROGRAMS,
     API_PATH_BPC_STATUS,
     API_PATH_GET_POOL_STATUS,
     API_PATH_GET_USER,
@@ -52,9 +56,13 @@ from ..const import (
     BPC_ACTION_OFF,
     BPC_ACTION_ON,
     FILTRATION_MODES,
+    FILTRATION_MODES_WITH_OFFSET,
     HTTP_MAX_RETRIES,
     HTTP_RETRY_DELAY,
     HTTP_TIMEOUT,
+    MODE_AUTO,
+    MODE_AUTO_MINUS,
+    MODE_AUTO_PLUS,
     MODULE_TYPE_BPC,
     MODULE_TYPE_WATBOX,
     USER_AGENT,
@@ -138,6 +146,10 @@ class EasyCareClient:
         # Utilisé comme champ "id" dans les enveloppes setStatusCommandToSend
         # et reportManualCommandSent.
         self._bpc_module_id: str = ""
+        # Références modules WATBOX et BPC — mises en cache lors de get_bpc_status()
+        # pour permettre les appels programmes sans repasser les modules en paramètre.
+        self._watbox: Module | None = None
+        self._bpc: Module | None = None
 
     # ════════════════════════════════════════════════════════════════════════
     # MÉTHODES PUBLIQUES — LECTURE
@@ -303,11 +315,14 @@ class EasyCareClient:
 
         data = await self._request("GET", API_HOST_EASYCARE, path)
 
-        # Mise en cache de l'IJC ID du BPC pour les commandes setStatusCommandToSend
-        # et reportManualCommandSent. Confirmé APK : c'est le champ "id" (sans
-        # underscore) de la réponse module, qui correspond à ManufacturerData.mIDIJC.
+        # Mise en cache de l'IJC ID du BPC + références modules pour les commandes
+        # setStatusCommandToSend, reportManualCommandSent et les appels programmes.
+        # Confirmé APK : c'est le champ "id" (sans underscore) de la réponse module,
+        # qui correspond à ManufacturerData.mIDIJC.
         if bpc.id:
             self._bpc_module_id = bpc.id
+        self._watbox = watbox
+        self._bpc = bpc
 
         pool_inputs = data.get("pool") or []
         inputs: list[BPCInput] = []
@@ -338,6 +353,35 @@ class EasyCareClient:
             path,
         )
         return PoolStatus.from_api(data)
+
+    async def get_bpc_adapt_offset(self) -> int:
+        """Lit l'adaptOffset du programme pompe (index 0) depuis les programmes BPC.
+
+        Endpoint : GET /api/module/{watbox_serial}/programs/{bpc_name}
+
+        L'adaptOffset est stocké dans `programCharacteristics.adaptOffset` du
+        programme à index 0 (pompe). Confirmé APK : PoolProgram.jsonIJCDecode()
+        lit depuis `jSONObject2.optInt("adaptOffset", 0)` (jSONObject2 = programCharacteristics).
+
+        Returns:
+            adaptOffset en minutes : -60 (-2h), 0 (standard), +60 (+2h).
+            Retourne 0 si les modules ne sont pas disponibles ou si le programme
+            pompe est absent.
+        """
+        if self._watbox is None or self._bpc is None:
+            return 0
+
+        path = API_PATH_BPC_PROGRAMS.format(
+            watbox_serial=self._watbox.serial_number,
+            bpc_name=self._bpc.short_name,
+        )
+        data = await self._request("GET", API_HOST_EASYCARE, path)
+        programs = data.get("programs") or []
+        for prog in programs:
+            if prog.get("index") == 0:
+                charac = prog.get("programCharacteristics") or {}
+                return int(charac.get("adaptOffset", 0) or 0)
+        return 0
 
     # ════════════════════════════════════════════════════════════════════════
     # MÉTHODES PUBLIQUES — COMMANDES (ÉCRITURE)
@@ -516,6 +560,119 @@ class EasyCareClient:
             json_payload=payload,
         )
         return True
+
+    async def set_filtration_mode_with_offset(self, mode_option: str) -> bool:
+        """Change le mode de filtration avec gestion de l'offset AUTO.
+
+        Endpoint(s) :
+          - POST /api/setStatusCommandToSend (mode)
+          - GET + POST /api/module/{watbox}/programs/{bpc} (adaptOffset si AUTO)
+
+        mode_option peut être : "AUTO-2H", "AUTO", "AUTO+2H", "CONTINUOUS",
+        "MANUAL", "PROG".
+
+        Pour les modes non-AUTO, seul setStatusCommandToSend est appelé.
+        Pour les modes AUTO-*, set_filtration_mode("AUTO") est suivi d'un
+        _set_adapt_offset() qui lit, modifie et renvoie les programmes BPC.
+
+        Returns:
+            True si la commande a été acceptée.
+
+        Raises:
+            ValueError: mode_option invalide.
+        """
+        if mode_option not in FILTRATION_MODES_WITH_OFFSET:
+            raise ValueError(
+                f"Mode invalide : {mode_option!r} "
+                f"(attendu : {', '.join(FILTRATION_MODES_WITH_OFFSET)})"
+            )
+
+        if mode_option == MODE_AUTO_MINUS:
+            _LOGGER.info("Mode filtration → AUTO (adaptOffset=-60 min / -2h)")
+            await self.set_filtration_mode(MODE_AUTO)
+            await self._set_adapt_offset(ADAPT_OFFSET_MINUS)
+        elif mode_option == MODE_AUTO_PLUS:
+            _LOGGER.info("Mode filtration → AUTO (adaptOffset=+60 min / +2h)")
+            await self.set_filtration_mode(MODE_AUTO)
+            await self._set_adapt_offset(ADAPT_OFFSET_PLUS)
+        elif mode_option == MODE_AUTO:
+            _LOGGER.info("Mode filtration → AUTO (adaptOffset=0 / standard)")
+            await self.set_filtration_mode(MODE_AUTO)
+            await self._set_adapt_offset(ADAPT_OFFSET_NEUTRAL)
+        else:
+            # CONTINUOUS, MANUAL, PROG — aucune modification de l'offset
+            _LOGGER.info("Mode filtration → %s", mode_option)
+            await self.set_filtration_mode(mode_option)
+
+        return True
+
+    async def _set_adapt_offset(self, offset: int) -> None:
+        """Modifie l'adaptOffset du programme pompe (index 0) via GET + POST.
+
+        Stratégie : récupère les programmes actuels, modifie uniquement
+        `adaptOffset` dans programCharacteristics du programme pompe, puis
+        renvoie l'intégralité des programmes.
+
+        Payload POST confirmé APK (NetworkingProgram.java l.480-484) :
+          {"programs": [...], "module": "<bpc_ijc_id>", "programmationType": 1}
+
+        Args:
+            offset: -60, 0 ou +60 (minutes).
+        """
+        if self._watbox is None or self._bpc is None:
+            _LOGGER.warning(
+                "_set_adapt_offset: watbox/bpc non disponibles, offset ignoré"
+            )
+            return
+
+        path = API_PATH_BPC_PROGRAMS.format(
+            watbox_serial=self._watbox.serial_number,
+            bpc_name=self._bpc.short_name,
+        )
+
+        # GET — récupération des programmes actuels
+        data = await self._request("GET", API_HOST_EASYCARE, path)
+        programs = data.get("programs")
+        if not programs:
+            _LOGGER.warning(
+                "_set_adapt_offset: aucun programme BPC reçu — offset ignoré"
+            )
+            return
+
+        # Modification de adaptOffset dans programCharacteristics du programme pompe
+        modified = False
+        for prog in programs:
+            if prog.get("index") == 0:
+                charac = prog.get("programCharacteristics")
+                if isinstance(charac, dict):
+                    charac["adaptOffset"] = offset
+                    modified = True
+                break
+
+        if not modified:
+            _LOGGER.warning(
+                "_set_adapt_offset: programme pompe (index 0) ou "
+                "programCharacteristics absent — offset ignoré"
+            )
+            return
+
+        _LOGGER.debug(
+            "_set_adapt_offset: envoi adaptOffset=%d min sur BPC %s",
+            offset, self._bpc.short_name,
+        )
+
+        # POST — renvoi de l'intégralité des programmes avec l'offset modifié
+        post_payload: dict[str, Any] = {
+            "programs": programs,
+            "module": self._bpc_module_id,
+            "programmationType": 1,
+        }
+        await self._request(
+            "POST",
+            API_HOST_EASYCARE,
+            path,
+            json_payload=post_payload,
+        )
 
     # ════════════════════════════════════════════════════════════════════════
     # COUCHE HTTP INTERNE — REQUEST AVEC RETRY 401
