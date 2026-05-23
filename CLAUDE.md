@@ -68,6 +68,32 @@ WATBOX (passerelle)
 
 Entities are only created if the corresponding module is present in the modules coordinator response. BPC light entities additionally require `numberOfInputs >= 1` (spot) or `>= 2` (escalight).
 
+### AUTO filtration mode offset (+2h / standard / -2h)
+
+The EasyCare app exposes 3 variants of AUTO mode (confirmed from `FilteringTypeActivity.java`):
+- **AUTO -2h** → `adaptOffset = -60` (min)
+- **AUTO standard** → `adaptOffset = 0`
+- **AUTO +2h** → `adaptOffset = +60` (min)
+
+The `adaptOffset` is stored in the **pool pump program configuration**, NOT in `setStatusCommandToSend`. It requires a separate 2-step workflow:
+1. `setStatusCommandToSend` → set mode to "AUTO"
+2. `GET /api/module/{watbox}/programs/{bpc}` → read current programs
+3. Modify `adaptOffset` in `programCharacteristics` of program at index 0
+4. `POST /api/module/{watbox}/programs/{bpc}` → write modified programs back
+
+Programs POST payload confirmed from `NetworkingProgram.java`:
+```json
+{"programs": [...], "module": "<bpc_ijc_id>", "programmationType": 1}
+```
+
+The `adaptOffset` is nested inside `programCharacteristics` (not at root level):
+```json
+{"index": 0, "programCharacteristics": {"adaptOffset": -60, ...}, ...}
+```
+
+`adaptOffset` is only written/read when `programType == 4` (poolPump). Confirmed from
+`PoolProgram.jsonIJCEncode()` (classes4.dex `PoolProgramming.java`).
+
 ### BPC manual commands require two API calls
 
 Sending a pump/light command (`switch.py`, `light.py`) always calls:

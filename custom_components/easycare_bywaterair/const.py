@@ -79,6 +79,9 @@ API_PATH_GET_POOL_STATUS: Final = "/api/getPoolStatus"
 API_PATH_SET_STATUS_COMMAND: Final = "/api/setStatusCommandToSend"
 """Changement de mode de filtration (AUTO/CONTINUOUS/MANUAL/PROG/BOOST*)."""
 
+API_PATH_BPC_PROGRAMS: Final = "/api/module/{watbox_serial}/programs/{bpc_name}"
+"""Lecture (GET) et écriture (POST) des programmes BPC — contient adaptOffset."""
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Authentification OAuth2 Azure B2C Waterair
 # ─────────────────────────────────────────────────────────────────────────────
@@ -228,6 +231,12 @@ DEFAULT_DURATION_LIGHT_HOURS: Final = 1
 MODE_AUTO: Final = "AUTO"
 """Mode automatique — durée ajustée selon la température de l'eau."""
 
+MODE_AUTO_MINUS: Final = "AUTO-2H"
+"""Mode AUTO avec offset -2h (adaptOffset = -60 min)."""
+
+MODE_AUTO_PLUS: Final = "AUTO+2H"
+"""Mode AUTO avec offset +2h (adaptOffset = +60 min)."""
+
 MODE_CONTINUOUS: Final = "CONTINUOUS"
 """Marche forcée (= 'ON' dans l'UI mobile)."""
 
@@ -238,7 +247,23 @@ MODE_PROG: Final = "PROG"
 """Programmation horaire par l'utilisateur."""
 
 FILTRATION_MODES: Final = (MODE_AUTO, MODE_CONTINUOUS, MODE_MANUAL, MODE_PROG)
-"""Tous les modes principaux exposés via le select HA."""
+"""Modes principaux tels que retournés par l'API (setStatusCommandToSend)."""
+
+FILTRATION_MODES_WITH_OFFSET: Final = (
+    MODE_AUTO_MINUS, MODE_AUTO, MODE_AUTO_PLUS,
+    MODE_CONTINUOUS, MODE_MANUAL, MODE_PROG,
+)
+"""Tous les modes exposés via le select HA — inclut les 3 variantes AUTO avec offset."""
+
+# Valeurs d'offset (en minutes) — confirmées par APK (FilteringTypeActivity.java)
+ADAPT_OFFSET_MINUS: Final = -60
+"""Offset AUTO -2h (adaptOffset = -60 min)."""
+
+ADAPT_OFFSET_NEUTRAL: Final = 0
+"""Offset AUTO standard (adaptOffset = 0)."""
+
+ADAPT_OFFSET_PLUS: Final = 60
+"""Offset AUTO +2h (adaptOffset = +60 min)."""
 
 # Modes Boost (durées prédéfinies)
 BOOST_MODE_4H: Final = "BOOST4H"

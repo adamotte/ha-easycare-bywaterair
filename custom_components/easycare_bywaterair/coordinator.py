@@ -94,14 +94,16 @@ class BPCData:
     """Données retournées par EasyCareBPCCoordinator.
 
     Combine l'état des voies BPC (depuis easycare.waterair.com) et le statut
-    de filtration (depuis apiwf.solem.fr). Les deux sont récupérés en parallèle.
+    de filtration. Les données sont récupérées à chaque cycle réel.
 
-    pool_status peut être None si l'host Solem est indisponible — dans ce cas
-    on garde au moins les données BPC (pompe / lumières fonctionnent toujours).
+    pool_status peut être None si la dérivation BPC échoue (pompe absente).
+    adapt_offset est l'offset AUTO (en minutes) lu depuis les programmes BPC :
+      -60 → AUTO-2H, 0 → AUTO standard, +60 → AUTO+2H.
     """
 
     inputs: tuple[BPCInput, ...]
     pool_status: PoolStatus | None = None
+    adapt_offset: int = 0
 
     def get_input(self, index: int) -> BPCInput | None:
         """Retourne la voie BPC d'index donné, ou None si absente."""
@@ -424,14 +426,27 @@ class EasyCareBPCCoordinator(DataUpdateCoordinator[BPCData]):
         # `pool` de la réponse BPC.
         pool_status = _pool_status_from_inputs(inputs)
 
+        # Lecture de l'adaptOffset (offset AUTO -2h/standard/+2h)
+        # Non critique : un échec ne doit pas bloquer le coordinator principal.
+        adapt_offset = 0
+        try:
+            adapt_offset = await self._client.get_bpc_adapt_offset()
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug(
+                "get_bpc_adapt_offset ignoré (non-fatal) : %s", err
+            )
+            # On garde 0 comme valeur par défaut — l'affichage du mode AUTO
+            # sera "AUTO standard" jusqu'au prochain cycle.
+
         _LOGGER.debug(
-            "BPC update OK : %d voie(s), active=%s, boost=%s",
+            "BPC update OK : %d voie(s), active=%s, boost=%s, adaptOffset=%d",
             len(inputs),
             [inp.index for inp in inputs if inp.is_on],
             pool_status.is_boosting if pool_status else False,
+            adapt_offset,
         )
 
-        return BPCData(inputs=inputs, pool_status=pool_status)
+        return BPCData(inputs=inputs, pool_status=pool_status, adapt_offset=adapt_offset)
 
     def _should_skip_cycle(self) -> bool:
         """Détermine s'il faut sauter ce cycle de polling.
