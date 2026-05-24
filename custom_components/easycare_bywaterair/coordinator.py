@@ -125,6 +125,31 @@ class EasyCareUserCoordinator(DataUpdateCoordinator[UserData]):
             client, pool, metrics, alerts, treatment = await self._client.get_user()
         except Exception as err:  # noqa: BLE001
             raise _wrap_api_error(err, "get_user") from err
+
+        # Garde "dernière valeur connue" : si l'API retourne des métriques toutes
+        # None (réponse vide transitoire) mais que des valeurs précédentes existent,
+        # on les conserve plutôt que d'afficher "inconnu" pendant 30 min.
+        prev = self.data
+        if (
+            metrics.ph_value is None
+            and metrics.temperature_value is None
+            and metrics.chlorine_value is None
+            and prev is not None
+            and (
+                prev.metrics.ph_value is not None
+                or prev.metrics.temperature_value is not None
+                or prev.metrics.chlorine_value is not None
+            )
+        ):
+            _LOGGER.warning(
+                "Métriques AC1 toutes None (réponse API vide ?) — "
+                "conservation des valeurs précédentes (pH=%s, T=%s°C, Cl=%s mV)",
+                prev.metrics.ph_value,
+                prev.metrics.temperature_value,
+                prev.metrics.chlorine_value,
+            )
+            metrics = prev.metrics
+
         _LOGGER.debug("User update OK : pH=%s, T=%s°C", metrics.ph_value, metrics.temperature_value)
         return UserData(client=client, pool=pool, metrics=metrics, alerts=alerts, treatment=treatment)
 
@@ -234,8 +259,15 @@ class EasyCareBPCCoordinator(DataUpdateCoordinator[BPCData]):
         pool_status = _pool_status_from_inputs(inputs)
         try:
             pool_status = await self._client.get_pool_status()
+            _LOGGER.debug(
+                "get_pool_status OK : total=%s, date=%s, today=%s — raw=%s",
+                pool_status.total_activation_time,
+                pool_status.total_activation_time_reset_date,
+                pool_status.total_operating_time_for_today,
+                pool_status.raw,
+            )
         except Exception as err:  # noqa: BLE001
-            _LOGGER.debug("get_pool_status ignoré (non-fatal) : %s", err)
+            _LOGGER.warning("get_pool_status échoué (non-fatal) : %s", err)
 
         filtration_mode: str | None = None
         adapt_offset = 0

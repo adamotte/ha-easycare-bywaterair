@@ -10,6 +10,7 @@ Orchestre le cycle de vie des tokens :
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
@@ -297,9 +298,14 @@ class EasyCareAuth:
                         "Échec endpoint OAuth /token",
                         status_code=response.status, body=body,
                     )
+                if not body.strip():
+                    raise EasyCareInvalidResponseError(
+                        "Réponse OAuth vide (corps HTTP vide, endpoint Azure B2C transitoire)"
+                    )
                 try:
-                    return await response.json(content_type=None)
-                except (ValueError, aiohttp.ContentTypeError) as err:
+                    return json.loads(body)
+                except ValueError as err:
+                    _LOGGER.debug("OAuth /token corps brut : %r", body[:300])
                     raise EasyCareInvalidResponseError(f"Réponse OAuth non-JSON : {err}") from err
         except asyncio.TimeoutError as err:
             raise EasyCareTimeoutError("Timeout sur l'endpoint OAuth /token") from err
