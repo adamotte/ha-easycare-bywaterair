@@ -1,5 +1,13 @@
 # easy·care by Waterair — Intégration Home Assistant
 
+[![Release](https://img.shields.io/github/v/release/adamotte/ha-easycare-bywaterair?style=flat-square)](https://github.com/adamotte/ha-easycare-bywaterair/releases)
+[![HACS](https://img.shields.io/badge/HACS-Custom-orange.svg?style=flat-square)](https://hacs.xyz)
+[![License](https://img.shields.io/github/license/adamotte/ha-easycare-bywaterair?style=flat-square)](LICENSE)
+[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-%3E%3D2024.1-blue?style=flat-square&logo=home-assistant)](https://www.home-assistant.io)
+[![Last commit](https://img.shields.io/github/last-commit/adamotte/ha-easycare-bywaterair/main?style=flat-square)](https://github.com/adamotte/ha-easycare-bywaterair/commits/main)
+[![Issues](https://img.shields.io/github/issues/adamotte/ha-easycare-bywaterair?style=flat-square)](https://github.com/adamotte/ha-easycare-bywaterair/issues)
+[![Stars](https://img.shields.io/github/stars/adamotte/ha-easycare-bywaterair?style=flat-square)](https://github.com/adamotte/ha-easycare-bywaterair/stargazers)
+
 Intégration Home Assistant pour les piscines équipées de l'écosystème
 **easy·care by Waterair** (WATBOX + BPC + AC1).
 
