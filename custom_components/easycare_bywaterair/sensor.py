@@ -15,7 +15,6 @@ Expose tous les capteurs en lecture seule, répartis sur 4 appareils :
   ├── sensor.easycare_bywaterair_filtration_mode
   ├── sensor.easycare_bywaterair_pump_total_runtime
   ├── sensor.easycare_bywaterair_pump_counter_date
-  ├── sensor.easycare_bywaterair_pump_daily_runtime
   ├── sensor.easycare_bywaterair_boost_remaining
   ├── sensor.easycare_bywaterair_spot_mode       (si voie 1 présente)
   └── sensor.easycare_bywaterair_escalight_mode  (si voie 2 présente)
@@ -100,7 +99,6 @@ async def async_setup_entry(
             EasyCareFiltrationModeSensor(coords.bpc, entry),
             EasyCarePumpTotalRuntimeSensor(coords.bpc, entry),
             EasyCarePumpCounterDateSensor(coords.bpc, entry),
-            EasyCarePumpDailyRuntimeSensor(coords.bpc, entry),
             EasyCareBoostRemainingSensor(coords.bpc, entry),
         ])
         n = bpc.number_of_inputs
@@ -398,23 +396,6 @@ class EasyCarePumpCounterDateSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], S
         dt = self.coordinator.data.pump_activation_reset_date
         return dt.date() if dt else None
 
-
-class EasyCarePumpDailyRuntimeSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], SensorEntity):
-    """Durée de fonctionnement de la pompe aujourd'hui.
-
-    Non disponible via l'API REST Waterair — affiche toujours indisponible.
-    Conservé pour une implémentation future si l'endpoint est trouvé.
-    """
-
-    _attr_translation_key = "pump_daily_runtime"
-    _attr_icon = "mdi:timer-sand"
-
-    def __init__(self, coordinator: EasyCareBPCCoordinator, entry: ConfigEntry) -> None:
-        super().__init__(coordinator, entry, unique_id_suffix="pump_daily_runtime")
-
-    @property
-    def native_value(self) -> None:
-        return None
 
 
 class EasyCareBoostRemainingSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], SensorEntity):

@@ -83,7 +83,6 @@
       "filtration_mode": {"name": "Filtration mode"},
       "pump_total_runtime": {"name": "Pump total runtime"},
       "pump_counter_date": {"name": "Counter reference date"},
-      "pump_daily_runtime": {"name": "Pump runtime today"},
       "boost_remaining": {"name": "Boost remaining"},
       "spot_mode": {"name": "Spotlight mode"},
       "escalight_mode": {"name": "Step lighting mode"},
