@@ -89,7 +89,7 @@
       "escalight_mode": {"name": "Step lighting mode"},
       "owner": {"name": "Account owner"},
       "detail": {"name": "Pool model"}
-    },
+    }
   },
   "services": {
     "pump_on": {
