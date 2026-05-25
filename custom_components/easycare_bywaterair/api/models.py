@@ -323,7 +323,7 @@ class ModuleOutput:
 class Module:
     """Module physique de l'écosystème Waterair (WATBOX, BPC, AC1, LR-PR).
 
-    Le `short_name` retire le préfixe du nom (ex: "BPC-06DFC6" → "06DFC6")
+    Le `short_name` retire le préfixe du nom (ex: "BPC-XXXXXX" → "XXXXXX")
     pour construire les URLs API.
     """
 
