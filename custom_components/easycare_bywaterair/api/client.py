@@ -185,6 +185,10 @@ class EasyCareClient:
             self._bpc_module_id = bpc.id
         self._watbox = watbox
         self._bpc = bpc
+        _LOGGER.debug(
+            "BPC status — clés racine : %s",
+            {k: v for k, v in data.items() if k != "pool"},
+        )
         pool_inputs = data.get("pool") or []
         inputs: list[BPCInput] = []
         for raw_input in pool_inputs:
