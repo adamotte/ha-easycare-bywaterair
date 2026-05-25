@@ -18,8 +18,7 @@ Intégration Home Assistant pour les piscines équipées de l'écosystème
 
 ### Pilotage
 - 💡 **Lumières** : projecteur (spot) et éclairage des marches (escalight) — allumage MANUEL (1h à 6h max)
-- 💧 **Pompe de filtration** : marche/arrêt
-- 🔄 **Mode de filtration** : AUTO (-2h / standard / +2h) / Marche forcée / Arrêt
+- 🔄 **Mode de filtration** : AUTO (-2h / standard / +2h) / Marche forcée / Arrêt (pilote la pompe)
 - ⚡ **Boost** : 4h / 12h / 24h / 36h / 48h / 72h / annulation
 
 ### Avantages techniques
