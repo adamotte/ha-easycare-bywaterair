@@ -1,4 +1,4 @@
-# easy·care by Waterair — Intégration Home Assistant
+# easy·care by Waterair — Home Assistant Integration
 
 [![Release](https://img.shields.io/github/v/release/adamotte/ha-easycare-bywaterair?style=flat-square)](https://github.com/adamotte/ha-easycare-bywaterair/releases)
 [![HACS](https://img.shields.io/badge/HACS-Custom-orange.svg?style=flat-square)](https://hacs.xyz)
@@ -8,83 +8,83 @@
 [![Issues](https://img.shields.io/github/issues/adamotte/ha-easycare-bywaterair?style=flat-square)](https://github.com/adamotte/ha-easycare-bywaterair/issues)
 [![Stars](https://img.shields.io/github/stars/adamotte/ha-easycare-bywaterair?style=flat-square)](https://github.com/adamotte/ha-easycare-bywaterair/stargazers)
 
-Intégration Home Assistant pour les piscines équipées de l'écosystème
-**easy·care by Waterair** (WATBOX + BPC + AC1).
+Home Assistant integration for pools equipped with the
+**easy·care by Waterair** ecosystem (WATBOX + BPC + AC1).
 
-> ⚠️ **Cette intégration n'est pas officielle.** Elle est développée de manière
-> indépendante. Waterair n'est pas affilié à ce projet.
+> ⚠️ **This integration is unofficial.** It is independently developed.
+> Waterair is not affiliated with this project.
 
-## ✨ Fonctionnalités
+## ✨ Features
 
-### Lecture des données
-- 🌡️ Température de l'eau, pH, chlore (redox/ORP)
-- 🔋 Niveau de batterie de l'analyseur AC1
-- 📊 Pression de filtration (si capteur LR-PR présent)
-- 🔔 Notifications et traitements en cours
-- ⚙️ Mode de filtration actuel et compteurs de la pompe
-- 💡 **Mode des lumières** : AUTO / MANUEL / ETEINT / PAUSE (avec plages horaires et durée de pause en attributs)
+### Data reading
+- 🌡️ Water temperature, pH, chlorine (redox/ORP)
+- 🔋 AC1 analyser battery level
+- 📊 Filtration pressure (if LR-PR sensor is present)
+- 🔔 Notifications and active treatments
+- ⚙️ Current filtration mode and pump counters
+- 💡 **Light mode**: AUTO / MANUAL / OFF / PAUSE (with time slots and pause duration as attributes)
 
-### Pilotage
-- 💡 **Lumières** : projecteur (spot) et éclairage des marches (escalight) — allumage MANUEL (1h à 6h max)
-- 🔄 **Mode de filtration** : AUTO (-2h / standard / +2h) / Marche forcée / Arrêt (pilote la pompe)
-- ⚡ **Boost** : 4h / 12h / 24h / 36h / 48h / 72h / annulation
+### Control
+- 💡 **Lights**: spotlight (spot) and step lighting (escalight) — MANUAL on (1h to 6h max)
+- 🔄 **Filtration mode**: AUTO (-2h / standard / +2h) / Continuous / Off (controls the pump)
+- ⚡ **Boost**: 4h / 12h / 24h / 36h / 48h / 72h / cancel
 
-### Avantages techniques
-- 🔐 **Refresh token automatique** — plus besoin de re-saisir le token tous les 2 mois
-- 🏛️ **Architecture HA standard** : ConfigEntry, DataUpdateCoordinator, Device Registry
-- 📱 **Configuration via l'UI** (pas de YAML)
-- 🌐 **Multi-langues** (français, anglais)
-- 🧩 **6 services HA** appelables depuis automations
-- 🏠 **Appareils correctement modélisés** : WATBOX → BPC, AC1, LR-PR
+### Technical highlights
+- 🔐 **Automatic token refresh** — no more manual re-entry every 2 months
+- 🏛️ **Standard HA architecture**: ConfigEntry, DataUpdateCoordinator, Device Registry
+- 📱 **UI-based configuration** (no YAML)
+- 🌐 **Multi-language** (French, English)
+- 🧩 **6 HA services** callable from automations
+- 🏠 **Properly modelled devices**: WATBOX → BPC, AC1, LR-PR
 
 ## 📦 Installation
 
-### Via HACS (recommandé)
-1. Dans HACS → Intégrations → menu (⋮) → Dépôts personnalisés
-2. Ajouter l'URL de ce dépôt comme type "Integration"
-3. Installer "easy·care by Waterair"
-4. Redémarrer Home Assistant
+### Via HACS (recommended)
+1. In HACS → Integrations → menu (⋮) → Custom repositories
+2. Add this repository URL as type "Integration"
+3. Install "easy·care by Waterair"
+4. Restart Home Assistant
 
-### Manuelle
-Copier le dossier `custom_components/easycare_bywaterair` dans le dossier
-`custom_components` de votre installation HA, puis redémarrer.
+### Manual
+Copy the `custom_components/easycare_bywaterair` folder into the `custom_components`
+directory of your HA installation, then restart.
 
 ## 🔧 Configuration
 
-1. **Paramètres → Appareils & Services → Ajouter une intégration**
-2. Rechercher "easy·care by Waterair"
-3. Cliquer sur le lien d'autorisation affiché
-4. Se connecter avec son compte Waterair
-5. Le navigateur affichera une erreur (redirection `msauth://`) — c'est normal
-6. **Copier l'URL complète** de la barre d'adresse (ou juste la valeur après `code=`)
-7. La coller dans HA et valider
+1. **Settings → Devices & Services → Add Integration**
+2. Search for "easy·care by Waterair"
+3. Click the authorization link displayed
+4. Log in with your Waterair account
+5. The browser will show an error (`msauth://` redirect) — this is normal
+6. **Copy the full URL** from the address bar (or just the value after `code=`)
+7. Paste it into HA and confirm
 
-L'intégration s'occupe ensuite du renouvellement automatique des tokens.
+The integration then handles automatic token renewal.
 
-## 🎛️ Services exposés
+## 🎛️ Available services
 
-| Service | Description | Paramètres |
+| Service | Description | Parameters |
 |---|---|---|
-| `easycare_bywaterair.pump_on` | Démarre la pompe ⚠️ | `duration_minutes` (1-1440, défaut 60) |
-| `easycare_bywaterair.pump_off` | Arrête la pompe ⚠️ | — |
-| `easycare_bywaterair.set_filtration_mode` | Change le mode de filtration ✅ | `mode` (AUTO / CONTINUOUS / MANUAL) |
-| `easycare_bywaterair.start_boost` | Lance un boost | `duration` (BOOST4H / BOOST12H / BOOST24H / BOOST36H / BOOST48H / BOOST72H) |
-| `easycare_bywaterair.cancel_boost` | Annule le boost | — |
-| `easycare_bywaterair.refresh_data` | Force un refresh | — |
+| `easycare_bywaterair.pump_on` | Start the pump ⚠️ | `duration_minutes` (1-1440, default 60) |
+| `easycare_bywaterair.pump_off` | Stop the pump ⚠️ | — |
+| `easycare_bywaterair.set_filtration_mode` | Change the filtration mode ✅ | `mode` (AUTO / CONTINUOUS / MANUAL) |
+| `easycare_bywaterair.start_boost` | Start a boost | `duration` (BOOST4H / BOOST12H / BOOST24H / BOOST36H / BOOST48H / BOOST72H) |
+| `easycare_bywaterair.cancel_boost` | Cancel the boost | — |
+| `easycare_bywaterair.refresh_data` | Force a refresh | — |
 
-> ⚠️ **`pump_on` / `pump_off`** envoient une commande BPC manuelle directe qui
-> court-circuite le mode de filtration configuré dans l'app EasyCare. Préférez
-> **`set_filtration_mode`** (mode `CONTINUOUS` pour forcer la marche, `MANUAL`
-> pour forcer l'arrêt, `AUTO` pour revenir au pilotage automatique) — c'est le
-> mécanisme prévu par l'API Waterair et le seul qui garantit la cohérence avec
-> l'application mobile.
+> ⚠️ **`pump_on` / `pump_off`** send a direct manual BPC command that bypasses
+> the filtration mode configured in the EasyCare app. Prefer
+> **`set_filtration_mode`** (mode `CONTINUOUS` to force on, `MANUAL`
+> to force off, `AUTO` to return to automatic control) — this is the
+> mechanism intended by the Waterair API and the only one that guarantees
+> consistency with the mobile app.
 
-## 📋 Exemple d'automation
+## 📋 Automation examples
 
 ```yaml
-# Lancer un boost de 12h chaque dimanche matin
+# Start a 12h boost every Sunday morning
 automation:
-  - alias: "Piscine — Boost dominical"
+  - alias: "Pool — Sunday boost"
     trigger:
       - platform: time
         at: "09:00:00"
@@ -96,8 +96,8 @@ automation:
         data:
           duration: BOOST12H
 
-# Alerte chlore bas
-  - alias: "Piscine — Alerte chlore bas"
+# Low chlorine alert
+  - alias: "Pool — Low chlorine alert"
     trigger:
       - platform: numeric_state
         entity_id: sensor.easycare_bywaterair_chlorine
@@ -105,25 +105,24 @@ automation:
     action:
       - service: notify.notify
         data:
-          message: "Chlore bas : {{ states('sensor.easycare_bywaterair_chlorine') }} mV"
+          message: "Low chlorine: {{ states('sensor.easycare_bywaterair_chlorine') }} mV"
 ```
 
-## ⚠️ Limitations connues
+## ⚠️ Known limitations
 
-- **Mode BOOST avec durée personnalisée** non supporté — les durées disponibles
-  sont 4h, 12h, 24h, 36h, 48h et 72h.
-- **Mode PROG de la pompe (programmation horaire)** : détecté en lecture (capteur
-  `filtration_mode`), mais pas proposé comme option dans le sélecteur.
-  La configuration des plages horaires reste dans l'app mobile.
-- **Modes AUTO et PAUSE des lumières** : visibles en lecture (capteurs `spot_mode`
-  et `escalight_mode`) mais non modifiables depuis HA. La configuration des plages
-  horaires (AUTO) et la durée de suspension (PAUSE, 1–15 jours) restent dans
-  l'app mobile. Seul le mode MANUEL (allumage forcé 1h–6h) est pilotable via
-  `light.turn_on`.
+- **BOOST with custom duration** not supported — available durations are
+  4h, 12h, 24h, 36h, 48h and 72h.
+- **Pump PROG mode (time schedule)**: detected in read mode (sensor
+  `filtration_mode`), but not offered as an option in the selector.
+  Time slot configuration remains in the mobile app.
+- **AUTO and PAUSE light modes**: visible in read mode (sensors `spot_mode`
+  and `escalight_mode`) but not configurable from HA. Time slot configuration
+  (AUTO) and suspension duration (PAUSE, 1–15 days) remain in the mobile app.
+  Only MANUAL mode (forced on 1h–6h) is controllable via `light.turn_on`.
 
 ## 🐛 Debug
 
-Pour activer les logs détaillés :
+To enable detailed logs:
 
 ```yaml
 logger:
@@ -132,6 +131,6 @@ logger:
     custom_components.easycare_bywaterair: debug
 ```
 
-## 📄 Licence
+## 📄 License
 
 MIT
