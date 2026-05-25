@@ -57,12 +57,19 @@ L'intégration s'occupe ensuite du renouvellement automatique des tokens.
 
 | Service | Description | Paramètres |
 |---|---|---|
-| `easycare_bywaterair.pump_on` | Démarre la pompe | `duration_minutes` (1-1440, défaut 60) |
-| `easycare_bywaterair.pump_off` | Arrête la pompe | — |
-| `easycare_bywaterair.set_filtration_mode` | Change le mode | `mode` (AUTO / CONTINUOUS / MANUAL) |
+| `easycare_bywaterair.pump_on` | Démarre la pompe ⚠️ | `duration_minutes` (1-1440, défaut 60) |
+| `easycare_bywaterair.pump_off` | Arrête la pompe ⚠️ | — |
+| `easycare_bywaterair.set_filtration_mode` | Change le mode de filtration ✅ | `mode` (AUTO / CONTINUOUS / MANUAL) |
 | `easycare_bywaterair.start_boost` | Lance un boost | `duration` (BOOST4H / BOOST12H / BOOST24H / BOOST36H / BOOST48H / BOOST72H) |
 | `easycare_bywaterair.cancel_boost` | Annule le boost | — |
 | `easycare_bywaterair.refresh_data` | Force un refresh | — |
+
+> ⚠️ **`pump_on` / `pump_off`** envoient une commande BPC manuelle directe qui
+> court-circuite le mode de filtration configuré dans l'app EasyCare. Préférez
+> **`set_filtration_mode`** (mode `CONTINUOUS` pour forcer la marche, `MANUAL`
+> pour forcer l'arrêt, `AUTO` pour revenir au pilotage automatique) — c'est le
+> mécanisme prévu par l'API Waterair et le seul qui garantit la cohérence avec
+> l'application mobile.
 
 ## 📋 Exemple d'automation
 
