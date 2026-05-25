@@ -1,7 +1,7 @@
-# Easy-care by Waterair — Intégration Home Assistant
+# easy·care by Waterair — Intégration Home Assistant
 
 Intégration Home Assistant pour les piscines équipées de l'écosystème
-**Easy-care by Waterair** (WATBOX + BPC + AC1).
+**easy·care by Waterair** (WATBOX + BPC + AC1).
 
 > ⚠️ **Cette intégration n'est pas officielle.** Elle est développée de manière
 > indépendante. Waterair n'est pas affilié à ce projet.
@@ -34,7 +34,7 @@ Intégration Home Assistant pour les piscines équipées de l'écosystème
 ### Via HACS (recommandé)
 1. Dans HACS → Intégrations → menu (⋮) → Dépôts personnalisés
 2. Ajouter l'URL de ce dépôt comme type "Integration"
-3. Installer "Easy-care by Waterair"
+3. Installer "easy·care by Waterair"
 4. Redémarrer Home Assistant
 
 ### Manuelle
@@ -44,7 +44,7 @@ Copier le dossier `custom_components/easycare_bywaterair` dans le dossier
 ## 🔧 Configuration
 
 1. **Paramètres → Appareils & Services → Ajouter une intégration**
-2. Rechercher "Easy-care by Waterair"
+2. Rechercher "easy·care by Waterair"
 3. Cliquer sur le lien d'autorisation affiché
 4. Se connecter avec son compte Waterair
 5. Le navigateur affichera une erreur (redirection `msauth://`) — c'est normal

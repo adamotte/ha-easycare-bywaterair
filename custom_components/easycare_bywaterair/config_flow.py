@@ -130,7 +130,7 @@ class EasyCareConfigFlow(ConfigFlow, domain=DOMAIN):
                 return self.async_abort(reason="reauth_successful")
             await self.async_set_unique_id(f"easycare_pool_{pool_id}")
             self._abort_if_unique_id_configured()
-            return self.async_create_entry(title=f"Easy-care Piscine {pool_id}", data=data_to_save)
+            return self.async_create_entry(title=f"easy·care Piscine {pool_id}", data=data_to_save)
         return self._show_form(errors)
 
     def _show_form(self, errors: dict[str, str]) -> ConfigFlowResult:
