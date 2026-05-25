@@ -2,7 +2,7 @@
   "config": {
     "step": {
       "user": {
-        "title": "Easy-care by Waterair — Configuration",
+        "title": "easy·care by Waterair — Configuration",
         "description": "**Étape 1 — Autorisation**\n\nCliquez **[ici]({authorize_url})** pour vous connecter avec votre compte Waterair.\n\nSi le lien ne s'ouvre pas, copiez-collez cette URL dans votre navigateur :\n`{authorize_url_raw}`\n\n**Étape 2 — Récupérer le code**\n\nAprès connexion, le navigateur affichera une erreur (redirection msauth:// — c'est normal). **Copiez l'URL complète** depuis la barre d'adresse, puis collez-la ci-dessous.\n\n> Astuce : sur mobile ou si la barre d'adresse est masquée, utilisez les outils développeur du navigateur (F12 → Réseau) pour retrouver l'URL de redirection.",
         "data": {
           "auth_code": "Code d'autorisation (ou URL complète)",
@@ -10,7 +10,7 @@
         }
       },
       "reauth_confirm": {
-        "title": "Easy-care — Ré-authentification requise",
+        "title": "easy·care — Ré-authentification requise",
         "description": "Votre session a expiré.\n\nCliquez **[ici]({authorize_url})** pour vous reconnecter, ou copiez cette URL dans votre navigateur :\n`{authorize_url_raw}`\n\nAprès connexion, copiez l'URL de redirection (msauth://...) depuis la barre d'adresse et collez-la ci-dessous.",
         "data": {
           "auth_code": "Nouveau code d'autorisation"

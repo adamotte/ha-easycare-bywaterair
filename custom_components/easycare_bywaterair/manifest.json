@@ -1,6 +1,6 @@
 {
   "domain": "easycare_bywaterair",
-  "name": "Easy-care by Waterair",
+  "name": "easy·care by Waterair",
   "version": "0.4.1",
   "config_flow": true,
   "documentation": "https://github.com/YOUR_GITHUB/ha-easycare-bywaterair",
