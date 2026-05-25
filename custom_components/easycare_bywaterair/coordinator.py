@@ -270,13 +270,13 @@ class EasyCareBPCCoordinator(DataUpdateCoordinator[BPCData]):
         except Exception as err:  # noqa: BLE001
             _LOGGER.warning("get_pool_status échoué (non-fatal) : %s", err)
 
-        # DEBUG TEMPORAIRE — sonde l'endpoint compteurs pompe (v0.3.4-beta.2)
+        # DEBUG TEMPORAIRE — sonde compteurs pompe (v0.3.4-beta.4)
         if not self._debug_activation_probed:
             self._debug_activation_probed = True
             try:
-                await self._client.debug_get_output_activation_history()
+                await self._client.debug_pump_counters()
             except Exception as err:  # noqa: BLE001
-                _LOGGER.debug("debug_activation_history ignoré : %s", err)
+                _LOGGER.debug("debug_pump_counters ignoré : %s", err)
 
         filtration_mode: str | None = None
         adapt_offset = 0

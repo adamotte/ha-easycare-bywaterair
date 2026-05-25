@@ -207,71 +207,77 @@ class EasyCareClient:
         data = await self._request("GET", API_HOST_EASYCARE, path)
         return PoolStatus.from_api(data)
 
-    async def debug_get_output_activation_history(self) -> None:
-        """DEBUG TEMPORAIRE — sonde getComputedOutputActivationHistory (beta.3).
+    async def debug_pump_counters(self) -> None:
+        """DEBUG TEMPORAIRE — recherche les compteurs pompe (beta.4).
 
-        beta.2 : GET ?moduleId&outputIndex=0 → [] (vide). Hypothèse : plage de dates requise.
-        beta.3 : teste les variantes avec dates, pool_id, watbox serial.
-        À supprimer une fois le format confirmé.
+        beta.3 : getComputedOutputActivationHistory toujours []. Nouvelles pistes :
+        - Programme index 0 complet (champs hors programCharacteristics)
+        - getPoolStatus sans paramètre
+        - getModuleInputs pour le BPC
+        - getUserWithHisModules → raw BPC module
+        À supprimer une fois la source identifiée.
         """
         if not self._bpc_module_id:
-            _LOGGER.debug("debug_activation_history : bpc_module_id non disponible, skip")
+            _LOGGER.debug("debug_pump_counters : bpc_module_id non disponible, skip")
             return
-        endpoint = "/api/getComputedOutputActivationHistory"
 
-        # Variante A : avec startDate/endDate ISO 8601 (large plage : tout depuis 2020)
-        try:
-            pathA = (
-                f"{endpoint}?moduleId={self._bpc_module_id}&outputIndex=0"
-                "&startDate=2020-01-01T00:00:00.000Z&endDate=2026-12-31T23:59:59.999Z"
-            )
-            rawA = await self._request("GET", API_HOST_EASYCARE, pathA)
-            _LOGGER.debug("activation_history A (moduleId+dates ISO) : %s", rawA)
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.debug("activation_history A (moduleId+dates ISO) : erreur %s", err)
-
-        # Variante B : avec from/to (timestamps Unix ms)
-        try:
-            pathB = (
-                f"{endpoint}?moduleId={self._bpc_module_id}&outputIndex=0"
-                "&from=1577836800000&to=1798761600000"
-            )
-            rawB = await self._request("GET", API_HOST_EASYCARE, pathB)
-            _LOGGER.debug("activation_history B (moduleId+from/to ms) : %s", rawB)
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.debug("activation_history B (moduleId+from/to ms) : erreur %s", err)
-
-        # Variante C : poolId au lieu de moduleId (comme getPoolStatus)
-        if self._pool_db_id:
+        # --- Sonde 1 : programme pompe complet (index 0) ---
+        if self._watbox is not None and self._bpc is not None:
             try:
-                pathC = f"{endpoint}?poolId={self._pool_db_id}&outputIndex=0"
-                rawC = await self._request("GET", API_HOST_EASYCARE, pathC)
-                _LOGGER.debug("activation_history C (poolId+outputIndex) : %s", rawC)
-            except Exception as err:  # noqa: BLE001
-                _LOGGER.debug("activation_history C (poolId+outputIndex) : erreur %s", err)
-
-        # Variante D : watbox serial au lieu de moduleId
-        if self._watbox is not None:
-            try:
-                pathD = (
-                    f"{endpoint}?moduleId={self._watbox.serial_number}&outputIndex=0"
+                path_prog = API_PATH_BPC_PROGRAMS.format(
+                    watbox_serial=self._watbox.serial_number, bpc_name=self._bpc.short_name,
                 )
-                rawD = await self._request("GET", API_HOST_EASYCARE, pathD)
-                _LOGGER.debug("activation_history D (watbox serial+outputIndex) : %s", rawD)
+                prog_data = await self._request("GET", API_HOST_EASYCARE, path_prog)
+                programs = prog_data.get("programs") or []
+                for p in programs:
+                    if p.get("index") == 0:
+                        _LOGGER.debug("debug_pump: programme index 0 complet : %s", p)
+                        break
             except Exception as err:  # noqa: BLE001
-                _LOGGER.debug("activation_history D (watbox serial+outputIndex) : erreur %s", err)
+                _LOGGER.debug("debug_pump: programme index 0 : erreur %s", err)
 
-        # Variante E : moduleId + outputIndex + large dates (watbox serial)
-        if self._watbox is not None:
-            try:
-                pathE = (
-                    f"{endpoint}?moduleId={self._watbox.serial_number}&outputIndex=0"
-                    "&startDate=2020-01-01T00:00:00.000Z&endDate=2026-12-31T23:59:59.999Z"
-                )
-                rawE = await self._request("GET", API_HOST_EASYCARE, pathE)
-                _LOGGER.debug("activation_history E (watbox+dates) : %s", rawE)
-            except Exception as err:  # noqa: BLE001
-                _LOGGER.debug("activation_history E (watbox+dates) : erreur %s", err)
+        # --- Sonde 2 : getPoolStatus sans poolId ---
+        try:
+            raw2 = await self._request("GET", API_HOST_EASYCARE, "/api/getPoolStatus")
+            # log seulement les clés + valeurs non-dict (pas les objets météo)
+            flat = {k: v for k, v in raw2.items() if not isinstance(v, (dict, list))}
+            nested_keys = [k for k, v in raw2.items() if isinstance(v, (dict, list))]
+            _LOGGER.debug(
+                "debug_pump: getPoolStatus (no id) — scalaires=%s | clés imbriquées=%s",
+                flat, nested_keys,
+            )
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("debug_pump: getPoolStatus (no id) : erreur %s", err)
+
+        # --- Sonde 3 : getModuleInputs pour le BPC ---
+        try:
+            path3 = f"/api/getModuleInputs?moduleId={self._bpc_module_id}"
+            raw3 = await self._request("GET", API_HOST_EASYCARE, path3)
+            _LOGGER.debug("debug_pump: getModuleInputs(bpc) : %s", raw3)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("debug_pump: getModuleInputs(bpc) : erreur %s", err)
+
+        # --- Sonde 4 : getUserWithHisModules → champs raw du module BPC ---
+        try:
+            raw4 = await self._request("GET", API_HOST_EASYCARE, API_PATH_GET_USER_MODULES)
+            pools = (
+                raw4.get("pools")
+                or raw4.get("poolsWithModules")
+                or (raw4.get("user") or {}).get("pools")
+                or []
+            )
+            if pools:
+                modules_raw = pools[self._pool_id - 1].get("modules") or []
+                for m in modules_raw:
+                    if m.get("type") == "lr-pc":
+                        # Log tous les champs scalaires + clés hors infos standard
+                        skip = {"type", "name", "id", "serialNumber", "customPhoto",
+                                "image", "numberOfInputs", "inputs", "programs"}
+                        extra = {k: v for k, v in m.items() if k not in skip}
+                        _LOGGER.debug("debug_pump: raw BPC module (lr-pc) extras : %s", extra)
+                        break
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("debug_pump: getUserWithHisModules/bpc : erreur %s", err)
 
     async def get_bpc_programs_data(self) -> tuple[str | None, int, dict | None, dict | None]:
         """Lit les programmes BPC pour la pompe et les lumières.
