@@ -101,11 +101,6 @@
       "owner": {"name": "Propriétaire du compte"},
       "detail": {"name": "Modèle de piscine"}
     },
-    "switch": {
-      "pump": {
-        "name": "Pompe de filtration"
-      }
-    }
   },
   "services": {
     "pump_on": {

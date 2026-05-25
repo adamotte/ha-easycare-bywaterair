@@ -90,11 +90,6 @@
       "owner": {"name": "Account owner"},
       "detail": {"name": "Pool model"}
     },
-    "switch": {
-      "pump": {
-        "name": "Filtration pump"
-      }
-    }
   },
   "services": {
     "pump_on": {
