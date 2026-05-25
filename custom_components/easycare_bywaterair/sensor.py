@@ -45,6 +45,7 @@ from homeassistant.const import (
     EntityCategory,
     UnitOfPressure,
     UnitOfTemperature,
+    UnitOfTime,
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -347,23 +348,41 @@ class EasyCareFiltrationModeSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], Se
 
 
 class EasyCarePumpTotalRuntimeSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], SensorEntity):
-    """Durée totale de fonctionnement de la pompe (format HH:MM)."""
+    """Durée totale de fonctionnement de la pompe depuis la date de remise à zéro.
+
+    Source : getUserWithHisModules → BPC outputs[0].totalActivationTime (en minutes).
+    Exprimée en heures dans HA.
+    """
 
     _attr_translation_key = "pump_total_runtime"
+    _attr_device_class = SensorDeviceClass.DURATION
+    _attr_native_unit_of_measurement = UnitOfTime.HOURS
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_suggested_display_precision = 0
     _attr_icon = "mdi:timer-outline"
 
     def __init__(self, coordinator: EasyCareBPCCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator, entry, unique_id_suffix="pump_total_runtime")
 
     @property
-    def native_value(self) -> str | None:
-        if self.coordinator.data is None or self.coordinator.data.pool_status is None:
+    def native_value(self) -> float | None:
+        if self.coordinator.data is None:
             return None
-        return self.coordinator.data.pool_status.total_activation_time
+        minutes = self.coordinator.data.pump_total_activation_minutes
+        if minutes is None:
+            return None
+        return round(minutes / 60, 1)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        if self.coordinator.data is None:
+            return {}
+        reset = self.coordinator.data.pump_activation_reset_date
+        return {"counter_reset_date": reset.date().isoformat() if reset else None}
 
 
 class EasyCarePumpCounterDateSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], SensorEntity):
-    """Date de référence du compteur de la pompe."""
+    """Date de remise à zéro du compteur de la pompe."""
 
     _attr_translation_key = "pump_counter_date"
     _attr_device_class = SensorDeviceClass.DATE
@@ -374,14 +393,18 @@ class EasyCarePumpCounterDateSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], S
 
     @property
     def native_value(self) -> date | None:
-        if self.coordinator.data is None or self.coordinator.data.pool_status is None:
+        if self.coordinator.data is None:
             return None
-        dt = self.coordinator.data.pool_status.total_activation_time_reset_date
+        dt = self.coordinator.data.pump_activation_reset_date
         return dt.date() if dt else None
 
 
 class EasyCarePumpDailyRuntimeSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], SensorEntity):
-    """Durée de fonctionnement de la pompe aujourd'hui."""
+    """Durée de fonctionnement de la pompe aujourd'hui.
+
+    Non disponible via l'API REST Waterair — affiche toujours indisponible.
+    Conservé pour une implémentation future si l'endpoint est trouvé.
+    """
 
     _attr_translation_key = "pump_daily_runtime"
     _attr_icon = "mdi:timer-sand"
@@ -390,10 +413,8 @@ class EasyCarePumpDailyRuntimeSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], 
         super().__init__(coordinator, entry, unique_id_suffix="pump_daily_runtime")
 
     @property
-    def native_value(self) -> str | None:
-        if self.coordinator.data is None or self.coordinator.data.pool_status is None:
-            return None
-        return self.coordinator.data.pool_status.total_operating_time_for_today
+    def native_value(self) -> None:
+        return None
 
 
 class EasyCareBoostRemainingSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], SensorEntity):
