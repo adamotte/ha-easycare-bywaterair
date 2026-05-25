@@ -185,10 +185,6 @@ class EasyCareClient:
             self._bpc_module_id = bpc.id
         self._watbox = watbox
         self._bpc = bpc
-        _LOGGER.debug(
-            "BPC status — clés racine : %s",
-            {k: v for k, v in data.items() if k != "pool"},
-        )
         pool_inputs = data.get("pool") or []
         inputs: list[BPCInput] = []
         for raw_input in pool_inputs:
@@ -206,78 +202,6 @@ class EasyCareClient:
             path = f"{path}?poolId={self._pool_db_id}"
         data = await self._request("GET", API_HOST_EASYCARE, path)
         return PoolStatus.from_api(data)
-
-    async def debug_pump_counters(self) -> None:
-        """DEBUG TEMPORAIRE — recherche les compteurs pompe (beta.4).
-
-        beta.3 : getComputedOutputActivationHistory toujours []. Nouvelles pistes :
-        - Programme index 0 complet (champs hors programCharacteristics)
-        - getPoolStatus sans paramètre
-        - getModuleInputs pour le BPC
-        - getUserWithHisModules → raw BPC module
-        À supprimer une fois la source identifiée.
-        """
-        if not self._bpc_module_id:
-            _LOGGER.debug("debug_pump_counters : bpc_module_id non disponible, skip")
-            return
-
-        # --- Sonde 1 : programme pompe complet (index 0) ---
-        if self._watbox is not None and self._bpc is not None:
-            try:
-                path_prog = API_PATH_BPC_PROGRAMS.format(
-                    watbox_serial=self._watbox.serial_number, bpc_name=self._bpc.short_name,
-                )
-                prog_data = await self._request("GET", API_HOST_EASYCARE, path_prog)
-                programs = prog_data.get("programs") or []
-                for p in programs:
-                    if p.get("index") == 0:
-                        _LOGGER.debug("debug_pump: programme index 0 complet : %s", p)
-                        break
-            except Exception as err:  # noqa: BLE001
-                _LOGGER.debug("debug_pump: programme index 0 : erreur %s", err)
-
-        # --- Sonde 2 : getPoolStatus sans poolId ---
-        try:
-            raw2 = await self._request("GET", API_HOST_EASYCARE, "/api/getPoolStatus")
-            # log seulement les clés + valeurs non-dict (pas les objets météo)
-            flat = {k: v for k, v in raw2.items() if not isinstance(v, (dict, list))}
-            nested_keys = [k for k, v in raw2.items() if isinstance(v, (dict, list))]
-            _LOGGER.debug(
-                "debug_pump: getPoolStatus (no id) — scalaires=%s | clés imbriquées=%s",
-                flat, nested_keys,
-            )
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.debug("debug_pump: getPoolStatus (no id) : erreur %s", err)
-
-        # --- Sonde 3 : getModuleInputs pour le BPC ---
-        try:
-            path3 = f"/api/getModuleInputs?moduleId={self._bpc_module_id}"
-            raw3 = await self._request("GET", API_HOST_EASYCARE, path3)
-            _LOGGER.debug("debug_pump: getModuleInputs(bpc) : %s", raw3)
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.debug("debug_pump: getModuleInputs(bpc) : erreur %s", err)
-
-        # --- Sonde 4 : getUserWithHisModules → champs raw du module BPC ---
-        try:
-            raw4 = await self._request("GET", API_HOST_EASYCARE, API_PATH_GET_USER_MODULES)
-            pools = (
-                raw4.get("pools")
-                or raw4.get("poolsWithModules")
-                or (raw4.get("user") or {}).get("pools")
-                or []
-            )
-            if pools:
-                modules_raw = pools[self._pool_id - 1].get("modules") or []
-                for m in modules_raw:
-                    if m.get("type") == "lr-pc":
-                        # Log tous les champs scalaires + clés hors infos standard
-                        skip = {"type", "name", "id", "serialNumber", "customPhoto",
-                                "image", "numberOfInputs", "inputs", "programs"}
-                        extra = {k: v for k, v in m.items() if k not in skip}
-                        _LOGGER.debug("debug_pump: raw BPC module (lr-pc) extras : %s", extra)
-                        break
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.debug("debug_pump: getUserWithHisModules/bpc : erreur %s", err)
 
     async def get_bpc_programs_data(self) -> tuple[str | None, int, dict | None, dict | None]:
         """Lit les programmes BPC pour la pompe et les lumières.

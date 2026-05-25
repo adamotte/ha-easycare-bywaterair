@@ -291,6 +291,35 @@ class Treatment:
 
 
 @dataclass(frozen=True, slots=True)
+class ModuleOutput:
+    """Voie de sortie d'un module BPC (pompe=0, spot=1, escalight=2).
+
+    total_activation_time          : durée cumulée en minutes depuis la date de remise à zéro.
+    total_activation_time_reset_date: date de remise à zéro du compteur.
+    """
+
+    index: int
+    name: str
+    id: str
+    total_activation_time: int | None = None
+    total_activation_time_reset_date: datetime | None = None
+
+    @classmethod
+    def from_api(cls, data: dict[str, Any]) -> ModuleOutput:
+        """Parse une sortie depuis le tableau 'outputs' du module BPC."""
+        tat = data.get("totalActivationTime")
+        return cls(
+            index=int(data.get("index", 0)),
+            name=str(data.get("name", "")),
+            id=str(data.get("id", "")),
+            total_activation_time=int(tat) if tat is not None else None,
+            total_activation_time_reset_date=_parse_timestamp(
+                data.get("totalActivationTimeResetDate")
+            ),
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class Module:
     """Module physique de l'écosystème Waterair (WATBOX, BPC, AC1, LR-PR).
 
@@ -306,6 +335,7 @@ class Module:
     battery_level: int | None = None
     image: str = ""
     static_pressure: float = 0.0
+    outputs: tuple[ModuleOutput, ...] = ()
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
 
     @property
@@ -314,6 +344,10 @@ class Module:
         if "-" in self.name:
             return self.name.split("-", 1)[1]
         return self.name
+
+    def get_output(self, index: int) -> ModuleOutput | None:
+        """Retourne la sortie d'index donné, ou None si absente."""
+        return next((o for o in self.outputs if o.index == index), None)
 
     @classmethod
     def from_api(cls, data: dict[str, Any]) -> Module:
@@ -336,11 +370,16 @@ class Module:
                 )
             except (KeyError, IndexError, TypeError, ValueError):
                 static_pressure = 0.0
+        outputs = tuple(
+            ModuleOutput.from_api(o)
+            for o in (data.get("outputs") or [])
+            if isinstance(o, dict)
+        )
         return cls(
             type=type_, name=name, id=id_, serial_number=serial,
             number_of_inputs=int(data.get("numberOfInputs", 0) or 0),
             battery_level=battery, image=data.get("customPhoto", ""),
-            static_pressure=static_pressure, raw=data,
+            static_pressure=static_pressure, outputs=outputs, raw=data,
         )
 
 

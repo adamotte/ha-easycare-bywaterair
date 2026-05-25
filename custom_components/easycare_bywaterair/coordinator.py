@@ -66,11 +66,13 @@ class UserData:
 class BPCData:
     """Données retournées par EasyCareBPCCoordinator.
 
-    filtration_mode  : mode dérivé des programmes BPC (AUTO/CONTINUOUS/MANUAL/PROG).
-    adapt_offset     : offset AUTO en minutes (-60=AUTO-2H, 0=standard, +60=AUTO+2H).
-    pool_status      : état pompe et boost (None si voie pompe absente).
-    spot_program     : programCharacteristics brut du spot (index 1), None si absent.
-    escalight_program: programCharacteristics brut de l'escalight (index 2), None si absent.
+    filtration_mode              : mode dérivé des programmes BPC (AUTO/CONTINUOUS/MANUAL/PROG).
+    adapt_offset                 : offset AUTO en minutes (-60=AUTO-2H, 0=standard, +60=AUTO+2H).
+    pool_status                  : état pompe et boost (None si voie pompe absente).
+    spot_program                 : programCharacteristics brut du spot (index 1), None si absent.
+    escalight_program            : programCharacteristics brut de l'escalight (index 2), None si absent.
+    pump_total_activation_minutes: durée cumulée de la pompe en minutes (depuis reset_date).
+    pump_activation_reset_date   : date de remise à zéro du compteur pompe.
     """
 
     inputs: tuple[BPCInput, ...]
@@ -79,6 +81,8 @@ class BPCData:
     adapt_offset: int = 0
     spot_program: dict | None = None
     escalight_program: dict | None = None
+    pump_total_activation_minutes: int | None = None
+    pump_activation_reset_date: datetime | None = None
 
     def get_input(self, index: int) -> BPCInput | None:
         """Retourne la voie BPC d'index donné, ou None si absente."""
@@ -236,7 +240,6 @@ class EasyCareBPCCoordinator(DataUpdateCoordinator[BPCData]):
         self._modules = modules_coordinator
         self._skipped_cycles: int = 0
         self._last_real_update: datetime | None = None
-        self._debug_activation_probed: bool = False
 
     async def _async_update_data(self) -> BPCData:
         """Récupère l'état du BPC avec logique de polling adaptatif."""
@@ -260,23 +263,22 @@ class EasyCareBPCCoordinator(DataUpdateCoordinator[BPCData]):
         pool_status = _pool_status_from_inputs(inputs)
         try:
             pool_status = await self._client.get_pool_status()
-            _LOGGER.debug(
-                "get_pool_status OK : total=%s, date=%s, today=%s — raw=%s",
-                pool_status.total_activation_time,
-                pool_status.total_activation_time_reset_date,
-                pool_status.total_operating_time_for_today,
-                pool_status.raw,
-            )
         except Exception as err:  # noqa: BLE001
-            _LOGGER.warning("get_pool_status échoué (non-fatal) : %s", err)
+            _LOGGER.debug("get_pool_status échoué (non-fatal) : %s", err)
 
-        # DEBUG TEMPORAIRE — sonde compteurs pompe (v0.3.4-beta.4)
-        if not self._debug_activation_probed:
-            self._debug_activation_probed = True
-            try:
-                await self._client.debug_pump_counters()
-            except Exception as err:  # noqa: BLE001
-                _LOGGER.debug("debug_pump_counters ignoré : %s", err)
+        # Compteurs pompe — lus depuis les modules (getUserWithHisModules, 24h)
+        pump_total_minutes: int | None = None
+        pump_reset_date: datetime | None = None
+        bpc_mod = self._modules.get_bpc()
+        if bpc_mod is not None:
+            output0 = bpc_mod.get_output(0)
+            if output0 is not None:
+                pump_total_minutes = output0.total_activation_time
+                pump_reset_date = output0.total_activation_time_reset_date
+                _LOGGER.debug(
+                    "Compteurs pompe : %s min depuis %s",
+                    pump_total_minutes, pump_reset_date,
+                )
 
         filtration_mode: str | None = None
         adapt_offset = 0
@@ -300,6 +302,8 @@ class EasyCareBPCCoordinator(DataUpdateCoordinator[BPCData]):
             adapt_offset=adapt_offset,
             spot_program=spot_program,
             escalight_program=escalight_program,
+            pump_total_activation_minutes=pump_total_minutes,
+            pump_activation_reset_date=pump_reset_date,
         )
 
     def _should_skip_cycle(self) -> bool:

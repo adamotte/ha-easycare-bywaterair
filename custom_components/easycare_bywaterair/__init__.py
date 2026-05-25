@@ -120,12 +120,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     except EasyCareError as err:
         raise ConfigEntryNotReady(f"Échec du premier refresh : {err}") from err
 
-    # DEBUG TEMPORAIRE — bearer pour probe_api.py
-    _LOGGER.debug(
-        "DEBUG bearer EasyCare : %s",
-        auth.bearer.bearer if auth.bearer else "absent",
-    )
-
     await _async_register_devices(hass, entry, coordinators)
 
     hass.data.setdefault(DOMAIN, {})
