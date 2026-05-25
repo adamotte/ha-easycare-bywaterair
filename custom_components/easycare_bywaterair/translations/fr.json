@@ -100,7 +100,7 @@
       "escalight_mode": {"name": "Mode éclairage marches"},
       "owner": {"name": "Propriétaire du compte"},
       "detail": {"name": "Modèle de piscine"}
-    },
+    }
   },
   "services": {
     "pump_on": {
