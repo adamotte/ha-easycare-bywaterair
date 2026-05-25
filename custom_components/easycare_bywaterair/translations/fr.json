@@ -94,7 +94,6 @@
       "filtration_mode": {"name": "Mode de filtration"},
       "pump_total_runtime": {"name": "Durée totale pompe"},
       "pump_counter_date": {"name": "Date référence compteur"},
-      "pump_daily_runtime": {"name": "Durée pompe aujourd'hui"},
       "boost_remaining": {"name": "Temps boost restant"},
       "spot_mode": {"name": "Mode projecteur"},
       "escalight_mode": {"name": "Mode éclairage marches"},
