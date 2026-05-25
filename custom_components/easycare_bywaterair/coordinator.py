@@ -236,6 +236,7 @@ class EasyCareBPCCoordinator(DataUpdateCoordinator[BPCData]):
         self._modules = modules_coordinator
         self._skipped_cycles: int = 0
         self._last_real_update: datetime | None = None
+        self._debug_activation_probed: bool = False
 
     async def _async_update_data(self) -> BPCData:
         """Récupère l'état du BPC avec logique de polling adaptatif."""
@@ -268,6 +269,14 @@ class EasyCareBPCCoordinator(DataUpdateCoordinator[BPCData]):
             )
         except Exception as err:  # noqa: BLE001
             _LOGGER.warning("get_pool_status échoué (non-fatal) : %s", err)
+
+        # DEBUG TEMPORAIRE — sonde l'endpoint compteurs pompe (v0.3.4-beta.2)
+        if not self._debug_activation_probed:
+            self._debug_activation_probed = True
+            try:
+                await self._client.debug_get_output_activation_history()
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.debug("debug_activation_history ignoré : %s", err)
 
         filtration_mode: str | None = None
         adapt_offset = 0

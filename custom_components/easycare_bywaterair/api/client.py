@@ -207,6 +207,48 @@ class EasyCareClient:
         data = await self._request("GET", API_HOST_EASYCARE, path)
         return PoolStatus.from_api(data)
 
+    async def debug_get_output_activation_history(self) -> None:
+        """DEBUG TEMPORAIRE — sonde getComputedOutputActivationHistory pour trouver le format.
+
+        Essaie plusieurs variantes de paramètres et loggue les résultats bruts.
+        À supprimer une fois le format confirmé.
+        """
+        if not self._bpc_module_id:
+            _LOGGER.debug("debug_activation_history : bpc_module_id non disponible, skip")
+            return
+        endpoint = "/api/getComputedOutputActivationHistory"
+
+        # Variante 1 : GET sans params
+        try:
+            raw = await self._request("GET", API_HOST_EASYCARE, endpoint)
+            _LOGGER.debug("activation_history GET (no params) : %s", raw)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("activation_history GET (no params) : erreur %s", err)
+
+        # Variante 2 : GET avec moduleId = bpc_module_id, outputIndex = 0
+        try:
+            path2 = f"{endpoint}?moduleId={self._bpc_module_id}&outputIndex=0"
+            raw2 = await self._request("GET", API_HOST_EASYCARE, path2)
+            _LOGGER.debug("activation_history GET ?moduleId&outputIndex : %s", raw2)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("activation_history GET ?moduleId&outputIndex : erreur %s", err)
+
+        # Variante 3 : POST avec {"id": bpc_module_id, "outputIndex": 0}
+        try:
+            payload3 = {"id": self._bpc_module_id, "outputIndex": 0}
+            raw3 = await self._request("POST", API_HOST_EASYCARE, endpoint, json_payload=payload3)
+            _LOGGER.debug("activation_history POST {id, outputIndex} : %s", raw3)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("activation_history POST {id, outputIndex} : erreur %s", err)
+
+        # Variante 4 : GET avec id = bpc_module_id, outputIndex = 0
+        try:
+            path4 = f"{endpoint}?id={self._bpc_module_id}&outputIndex=0"
+            raw4 = await self._request("GET", API_HOST_EASYCARE, path4)
+            _LOGGER.debug("activation_history GET ?id&outputIndex : %s", raw4)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("activation_history GET ?id&outputIndex : erreur %s", err)
+
     async def get_bpc_programs_data(self) -> tuple[str | None, int, dict | None, dict | None]:
         """Lit les programmes BPC pour la pompe et les lumières.
 
