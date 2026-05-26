@@ -45,6 +45,7 @@ from ..const import (
     MODULE_TYPE_WATBOX,
     USER_AGENT,
 )
+
 from .auth import EasyCareAuth
 from .exceptions import (
     EasyCareApiError,
@@ -65,6 +66,15 @@ from .models import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+# Encodage du mode de filtration dans programCharacteristics (programme pompe index=0).
+# Les valeurs proviennent du reverse engineering de l'app mobile.
+# mode=2 + rule=0 → PROG (lecture seule, non exposé en écriture).
+_MODE_TO_PROG: dict[str, tuple[int, int | None]] = {
+    "MANUAL":     (0, None),
+    "CONTINUOUS": (1, None),
+    "AUTO":       (2, 1),
+}
 
 
 class EasyCareClient:
@@ -314,7 +324,7 @@ class EasyCareClient:
         return True
 
     async def set_filtration_mode(self, mode: str) -> bool:
-        """Change le mode de filtration de la pompe.
+        """Change le mode de filtration de la pompe via les programmes BPC.
 
         Args:
             mode: AUTO, CONTINUOUS ou MANUAL.
@@ -322,12 +332,7 @@ class EasyCareClient:
         mode_upper = mode.upper().strip()
         if mode_upper not in FILTRATION_MODES:
             raise ValueError(f"Mode invalide : {mode!r} (attendu : {', '.join(FILTRATION_MODES)})")
-        payload: dict[str, Any] = {
-            "id": self._bpc_module_id,
-            "command": {"mode": mode_upper},
-            "wakeUp": False,
-        }
-        await self._request("POST", API_HOST_EASYCARE, API_PATH_SET_STATUS_COMMAND, json_payload=payload)
+        await self._update_pump_program(mode=mode_upper)
         return True
 
     async def start_boost(self, boost_mode: str) -> bool:
@@ -362,6 +367,9 @@ class EasyCareClient:
     async def set_filtration_mode_with_offset(self, mode_option: str) -> bool:
         """Change le mode de filtration avec gestion de l'offset AUTO.
 
+        Toutes les options (mode + offset) sont appliquées en un seul GET+POST
+        sur l'endpoint BPC programmes.
+
         Args:
             mode_option: AUTO-2H, AUTO, AUTO+2H, CONTINUOUS ou MANUAL.
 
@@ -374,26 +382,34 @@ class EasyCareClient:
                 f"(attendu : {', '.join(FILTRATION_MODES_WITH_OFFSET)})"
             )
         if mode_option == MODE_AUTO_MINUS:
-            await self.set_filtration_mode(MODE_AUTO)
-            await self._set_adapt_offset(ADAPT_OFFSET_MINUS)
+            await self._update_pump_program(mode=MODE_AUTO, adapt_offset=ADAPT_OFFSET_MINUS)
         elif mode_option == MODE_AUTO_PLUS:
-            await self.set_filtration_mode(MODE_AUTO)
-            await self._set_adapt_offset(ADAPT_OFFSET_PLUS)
+            await self._update_pump_program(mode=MODE_AUTO, adapt_offset=ADAPT_OFFSET_PLUS)
         elif mode_option == MODE_AUTO:
-            await self.set_filtration_mode(MODE_AUTO)
-            await self._set_adapt_offset(ADAPT_OFFSET_NEUTRAL)
+            await self._update_pump_program(mode=MODE_AUTO, adapt_offset=ADAPT_OFFSET_NEUTRAL)
         else:
-            await self.set_filtration_mode(mode_option)
+            await self._update_pump_program(mode=mode_option)
         return True
 
-    async def _set_adapt_offset(self, offset: int) -> None:
-        """Modifie l'adaptOffset du programme pompe (index 0) via GET + POST.
+    async def _update_pump_program(
+        self,
+        *,
+        mode: str | None = None,
+        adapt_offset: int | None = None,
+    ) -> None:
+        """Modifie le programme pompe (index 0) via GET + POST sur l'endpoint BPC programmes.
+
+        Encodage du mode dans programCharacteristics :
+          MANUAL     → mode=0
+          CONTINUOUS → mode=1
+          AUTO       → mode=2, rule=1
 
         Args:
-            offset: -60, 0 ou +60 (minutes).
+            mode        : "AUTO", "CONTINUOUS" ou "MANUAL" (None = conserver l'existant).
+            adapt_offset: -60, 0 ou +60 minutes (None = conserver l'existant).
         """
         if self._watbox is None or self._bpc is None:
-            _LOGGER.warning("_set_adapt_offset: modules non disponibles, offset ignoré")
+            _LOGGER.warning("_update_pump_program: modules non disponibles")
             return
         path = API_PATH_BPC_PROGRAMS.format(
             watbox_serial=self._watbox.serial_number, bpc_name=self._bpc.short_name,
@@ -401,20 +417,26 @@ class EasyCareClient:
         data = await self._request("GET", API_HOST_EASYCARE, path)
         programs = data.get("programs")
         if not programs:
-            _LOGGER.warning("_set_adapt_offset: aucun programme reçu")
+            _LOGGER.warning("_update_pump_program: aucun programme reçu")
             return
         modified = False
         for prog in programs:
             if prog.get("index") == 0:
                 charac = prog.get("programCharacteristics")
                 if isinstance(charac, dict):
-                    charac["adaptOffset"] = offset
+                    if mode is not None:
+                        prog_mode, prog_rule = _MODE_TO_PROG[mode]
+                        charac["mode"] = prog_mode
+                        if prog_rule is not None:
+                            charac["rule"] = prog_rule
+                    if adapt_offset is not None:
+                        charac["adaptOffset"] = adapt_offset
                     modified = True
                 break
         if not modified:
-            _LOGGER.warning("_set_adapt_offset: programme pompe absent")
+            _LOGGER.warning("_update_pump_program: programme pompe (index 0) absent")
             return
-        _LOGGER.debug("_set_adapt_offset: envoi adaptOffset=%d min", offset)
+        _LOGGER.debug("_update_pump_program: mode=%s adaptOffset=%s", mode, adapt_offset)
         post_payload: dict[str, Any] = {
             "programs": programs,
             "module": self._bpc_module_id,
