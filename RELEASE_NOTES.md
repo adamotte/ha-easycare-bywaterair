@@ -1,7 +1,17 @@
-**Correction : ré-authentification automatique quand la session Azure expire**
+**Les lumières et les modes de filtration ne rebasculent plus après une commande** *(#3)*
 
-Quand le token Azure B2C arrivait en fin de vie, l'intégration échouait silencieusement sans jamais demander de ré-authentification. HA affichait des entités indisponibles sans notification, et la seule solution était de supprimer/recréer l'intégration manuellement.
+Après avoir allumé/éteint une lumière ou changé le mode de filtration, l'interface revenait à l'ancien état une seconde plus tard. La commande était bien envoyée, mais le rafraîchissement immédiat renvoyait encore l'ancien état avant que le boîtier ait eu le temps de traiter la commande. L'interface reflète maintenant le changement immédiatement et se stabilise à la prochaine mise à jour.
 
-**Ce qui était cassé :** Azure B2C répond parfois avec une page HTML au lieu d'un JSON d'erreur quand la session expire. L'intégration ne reconnaissait pas ce cas et restait bloquée en erreur silencieuse.
+**Réduction drastique des appels aux serveurs Microsoft** *(#2)*
 
-**Ce qui est corrigé :** l'intégration détecte maintenant cette réponse HTML et déclenche correctement le flux de ré-authentification HA — une notification apparaît pour demander un nouveau code.
+L'intégration contactait Azure B2C toutes les ~50 minutes pour renouveler les tokens, même quand la session Waterair était encore valide. Si votre session dure plusieurs semaines (comportement observé pouvant aller jusqu'à 2 mois), plus aucun appel inutile — ce qui élimine une source fréquente d'erreurs de connexion.
+
+**Capteur de pression — valeur calibrée** *(#5)*
+
+La valeur affichée est maintenant la différence entre la mesure brute et la pression statique de référence enregistrée lors de l'étalonnage du capteur LR-PR.
+
+**Nouveaux attributs** *(#1, #4)*
+
+- `volume_m3` et `last_update` sur le capteur de détail piscine (WATBOX)
+- `custom_photo` — URL de la photo personnalisée configurée dans l'app Waterair
+- `last_update` sur les entités lumières (utile quand le polling passe en mode ralenti)

@@ -30,6 +30,7 @@ Expose tous les capteurs en lecture seule, répartis sur 4 appareils :
 from __future__ import annotations
 
 import logging
+import math
 from datetime import date, datetime, timezone
 from typing import Any
 
@@ -107,8 +108,9 @@ async def async_setup_entry(
         if n >= 2:
             sensors.append(EasyCareEscalightModeSensor(coords.bpc, entry))
 
-    if coords.modules.get_modules_by_type(MODULE_TYPE_PRESSURE):
-        sensors.append(EasyCarePressureSensor(coords.user, entry))
+    pressure_modules = coords.modules.get_modules_by_type(MODULE_TYPE_PRESSURE)
+    if pressure_modules:
+        sensors.append(EasyCarePressureSensor(coords.user, entry, pressure_modules[0].static_pressure))
 
     sensors.extend([
         EasyCareOwnerSensor(coords.user, entry),
@@ -424,7 +426,11 @@ class EasyCareBoostRemainingSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], Se
 
 
 class EasyCarePressureSensor(EasyCarePressureEntity[EasyCareUserCoordinator], SensorEntity):
-    """Pression de filtration mesurée par le LR-PR."""
+    """Pression de filtration mesurée par le LR-PR.
+
+    La valeur affichée est la différence entre la mesure brute et la pression
+    statique de référence (étalonnage du capteur), arrondie au centième supérieur.
+    """
 
     _attr_translation_key = "pressure"
     _attr_device_class = SensorDeviceClass.PRESSURE
@@ -432,21 +438,37 @@ class EasyCarePressureSensor(EasyCarePressureEntity[EasyCareUserCoordinator], Se
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_suggested_display_precision = 2
 
-    def __init__(self, coordinator: EasyCareUserCoordinator, entry: ConfigEntry) -> None:
+    def __init__(
+        self,
+        coordinator: EasyCareUserCoordinator,
+        entry: ConfigEntry,
+        static_pressure: float = 0.0,
+    ) -> None:
         super().__init__(coordinator, entry, unique_id_suffix="pressure")
+        self._static_pressure = static_pressure
 
     @property
     def native_value(self) -> float | None:
+        """Pression relative = |mesure - référence étalonnage|, arrondie au centième."""
         if self.coordinator.data is None:
             return None
-        return self.coordinator.data.metrics.pressure_value
+        raw = self.coordinator.data.metrics.pressure_value
+        if raw is None:
+            return None
+        diff = abs(raw - self._static_pressure)
+        if diff < 0.01:
+            return 0.0
+        return math.ceil(diff / 0.01) * 0.01
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         if self.coordinator.data is None:
             return {}
         date_val = self.coordinator.data.metrics.pressure_date
-        return {"last_measured": date_val.isoformat() if date_val else None}
+        return {
+            "last_measured": date_val.isoformat() if date_val else None,
+            "static_pressure": self._static_pressure,
+        }
 
 
 class EasyCareOwnerSensor(EasyCareWATBOXEntity[EasyCareUserCoordinator], SensorEntity):
@@ -497,11 +519,14 @@ class EasyCareDetailSensor(EasyCareWATBOXEntity[EasyCareUserCoordinator], Sensor
         if self.coordinator.data is None:
             return {}
         p = self.coordinator.data.pool
+        last_update = self.coordinator.last_update_success_time
         return {
             "volume_m3": p.volume,
             "address": p.address,
             "latitude": p.latitude,
             "longitude": p.longitude,
+            "custom_photo": p.custom_photo or None,
+            "last_update": last_update.isoformat() if last_update else None,
         }
 
 

@@ -60,30 +60,49 @@ class EasyCareFiltrationModeSelect(
     Le mode PROG est détecté en lecture (capteur filtration_mode) mais n'est
     pas proposé en écriture — le sélecteur affiche alors aucune option active.
     Les labels lisibles sont gérés par les fichiers de traduction.
+
+    État optimiste : après une sélection, l'option choisie est conservée
+    localement jusqu'à ce que le coordinateur confirme le nouveau mode.
+    Évite le rebond visuel identique au problème des lumières BPC.
     """
 
     _attr_translation_key = "filtration_mode"
     _attr_icon = "mdi:water-sync"
     _attr_options = list(FILTRATION_MODES_WITH_OFFSET)
 
+    _optimistic_option: str | None = None
+
     def __init__(self, coordinator: EasyCareBPCCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator, entry, unique_id_suffix="filtration_mode_select")
 
+    def _handle_coordinator_update(self) -> None:
+        """Efface l'état optimiste dès que le coordinateur confirme l'option attendue."""
+        if self._optimistic_option is not None:
+            confirmed = self._current_option_from_data()
+            if confirmed == self._optimistic_option:
+                _LOGGER.debug(
+                    "Mode filtration : option optimiste '%s' confirmée par le coordinateur",
+                    self._optimistic_option,
+                )
+                self._optimistic_option = None
+        super()._handle_coordinator_update()
+
     @property
     def current_option(self) -> str | None:
-        """Mode courant dérivé de (filtration_mode, adapt_offset).
+        """Mode courant — optimiste si une commande est en attente de confirmation."""
+        if self._optimistic_option is not None:
+            return self._optimistic_option
+        return self._current_option_from_data()
 
-        Retourne None si le mode est PROG (non sélectionnable).
-        """
+    def _current_option_from_data(self) -> str | None:
+        """Dérive l'option courante depuis les données du coordinateur."""
         if self.coordinator.data is None:
             return None
         mode = self.coordinator.data.filtration_mode
         if mode is None:
             return None
-
         if mode == MODE_PROG:
             return None
-
         if mode == MODE_AUTO:
             offset = self.coordinator.data.adapt_offset
             if offset == ADAPT_OFFSET_MINUS:
@@ -91,7 +110,6 @@ class EasyCareFiltrationModeSelect(
             if offset == ADAPT_OFFSET_PLUS:
                 return MODE_AUTO_PLUS
             return MODE_AUTO
-
         return mode
 
     async def async_select_option(self, option: str) -> None:
@@ -105,7 +123,10 @@ class EasyCareFiltrationModeSelect(
 
         _LOGGER.info("Changement mode filtration → %s", option)
         await client.set_filtration_mode_with_offset(option)
-        await self.coordinator.async_request_immediate_refresh()
+        # Mise à jour optimiste immédiate — pas de refresh immédiat,
+        # le poll naturel (1 min en mode actif) confirmera le nouveau mode.
+        self._optimistic_option = option
+        self.async_write_ha_state()
 
 
 _BOOST_OFF = "off"
@@ -119,18 +140,41 @@ class EasyCareBoostSelect(EasyCareBPCEntity[EasyCareBPCCoordinator], SelectEntit
     - Sélectionner une durée démarre le boost correspondant.
     - Sélectionner « off » annule le boost en cours.
     - Quand un boost tourne, l'état affiche « active » avec le temps restant en attribut.
+
+    État optimiste : après une commande, l'option attendue est conservée
+    localement jusqu'à confirmation par le coordinateur.
     """
 
     _attr_translation_key = "boost"
     _attr_icon = "mdi:timer-play"
     _attr_options = _BOOST_OPTIONS
 
+    _optimistic_option: str | None = None
+
     def __init__(self, coordinator: EasyCareBPCCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator, entry, unique_id_suffix="boost_select")
 
+    def _handle_coordinator_update(self) -> None:
+        """Efface l'état optimiste dès que le coordinateur confirme l'option attendue."""
+        if self._optimistic_option is not None:
+            confirmed = self._current_option_from_data()
+            if confirmed == self._optimistic_option:
+                _LOGGER.debug(
+                    "Boost : option optimiste '%s' confirmée par le coordinateur",
+                    self._optimistic_option,
+                )
+                self._optimistic_option = None
+        super()._handle_coordinator_update()
+
     @property
     def current_option(self) -> str | None:
-        """'active' si boost en cours, 'off' sinon."""
+        """'active' si boost en cours, 'off' sinon — optimiste si commande en attente."""
+        if self._optimistic_option is not None:
+            return self._optimistic_option
+        return self._current_option_from_data()
+
+    def _current_option_from_data(self) -> str:
+        """Dérive l'option courante depuis les données du coordinateur."""
         if self.coordinator.data is None:
             return _BOOST_OFF
         pump = self.coordinator.data.get_input(0)
@@ -156,8 +200,10 @@ class EasyCareBoostSelect(EasyCareBPCEntity[EasyCareBPCCoordinator], SelectEntit
         if option in (_BOOST_OFF, _BOOST_ACTIVE):
             _LOGGER.info("Annulation boost")
             await client.cancel_boost()
+            self._optimistic_option = _BOOST_OFF
         else:
             _LOGGER.info("Démarrage boost %s", option)
             await client.start_boost(option)
-
-        await self.coordinator.async_request_immediate_refresh()
+            self._optimistic_option = _BOOST_ACTIVE
+        # Pas de refresh immédiat — poll naturel (1 min) confirmera l'état.
+        self.async_write_ha_state()
