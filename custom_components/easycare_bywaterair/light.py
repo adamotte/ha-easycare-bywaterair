@@ -118,7 +118,7 @@ class EasyCareBPCLight(EasyCareBPCEntity[EasyCareBPCCoordinator], LightEntity):
         Si un état optimiste est actif, le temps restant estimé est retourné
         à la place de la valeur du coordinateur (encore potentiellement obsolète).
         """
-        last_update = self.coordinator.last_update_success_time
+        last_update = getattr(self.coordinator, "last_update_success_time", None)
         attrs: dict[str, Any] = {
             "last_update": last_update.isoformat() if last_update else None,
         }
