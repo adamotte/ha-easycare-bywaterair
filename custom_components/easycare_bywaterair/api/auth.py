@@ -226,8 +226,16 @@ class EasyCareAuth:
                         f"Réponse non-JSON de tokenFromAzureADB2CIdToken : {err}"
                     ) from err
         except asyncio.TimeoutError as err:
+            _LOGGER.error(
+                "Timeout (%ds) sur tokenFromAzureADB2CIdToken — serveur Waterair injoignable",
+                HTTP_TIMEOUT_AUTH,
+            )
             raise EasyCareTimeoutError("Timeout lors de l'obtention du bearer") from err
         except ClientError as err:
+            _LOGGER.error(
+                "Erreur réseau sur tokenFromAzureADB2CIdToken : %s: %s",
+                type(err).__name__, err,
+            )
             raise EasyCareConnectionError(f"Erreur réseau : {err}") from err
 
         bearer = BearerToken.from_api(data)
