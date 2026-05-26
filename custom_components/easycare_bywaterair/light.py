@@ -67,16 +67,27 @@ class EasyCareBPCLight(EasyCareBPCEntity[EasyCareBPCCoordinator], LightEntity):
 
     Les sous-classes doivent définir `_bpc_index` (voie 1 ou 2),
     `_attr_translation_key` et passer `unique_id_suffix` au constructeur.
+
+    État optimiste : après une commande on/off, l'état et le temps restant
+    estimé sont écrits immédiatement dans l'UI sans attendre le prochain poll.
+    Aucun refresh immédiat n'est déclenché — le BPC a besoin d'un peu de temps
+    pour traiter la commande. Le poll naturel (1 min en mode actif) rattrapera
+    l'état réel. Cela évite le rebond visuel on→off→on qu'un poll trop rapide
+    provoquerait en renvoyant encore l'ancien état.
     """
 
     _attr_supported_color_modes = {ColorMode.ONOFF}
     _attr_color_mode = ColorMode.ONOFF
 
     _bpc_index: int
+    _optimistic_is_on: bool | None = None
+    _optimistic_remaining: str | None = None
 
     @property
     def is_on(self) -> bool | None:
-        """Vrai si la voie BPC correspondante est active."""
+        """État de la voie BPC — optimiste si une commande est en attente de confirmation."""
+        if self._optimistic_is_on is not None:
+            return self._optimistic_is_on
         data = self.coordinator.data
         if data is None:
             return None
@@ -85,19 +96,44 @@ class EasyCareBPCLight(EasyCareBPCEntity[EasyCareBPCCoordinator], LightEntity):
             return None
         return bpc_input.is_on
 
+    def _handle_coordinator_update(self) -> None:
+        """Efface l'état optimiste dès que le coordinateur confirme la valeur attendue."""
+        if self._optimistic_is_on is not None:
+            data = self.coordinator.data
+            if data is not None:
+                bpc_input = data.get_input(self._bpc_index)
+                if bpc_input is not None and bpc_input.is_on == self._optimistic_is_on:
+                    _LOGGER.debug(
+                        "Voie BPC %d : état optimiste '%s' confirmé par le coordinateur",
+                        self._bpc_index, self._optimistic_is_on,
+                    )
+                    self._optimistic_is_on = None
+                    self._optimistic_remaining = None
+        super()._handle_coordinator_update()
+
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Temps restant de la voie en attribut."""
+        """Temps restant de la voie et date de dernière mise à jour en attributs.
+
+        Si un état optimiste est actif, le temps restant estimé est retourné
+        à la place de la valeur du coordinateur (encore potentiellement obsolète).
+        """
+        last_update = self.coordinator.last_update_success_time
+        attrs: dict[str, Any] = {
+            "last_update": last_update.isoformat() if last_update else None,
+        }
+        if self._optimistic_remaining is not None:
+            attrs["remaining_time"] = self._optimistic_remaining
+            return attrs
         data = self.coordinator.data
         if data is None:
-            return {}
+            return attrs
         bpc_input = data.get_input(self._bpc_index)
         if bpc_input is None:
-            return {}
-        return {
-            "remaining_time": bpc_input.remaining_time,
-            "bpc_index": self._bpc_index,
-        }
+            return attrs
+        attrs["remaining_time"] = bpc_input.remaining_time
+        attrs["bpc_index"] = self._bpc_index
+        return attrs
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Allume la lumière via la commande BPC manual."""
@@ -120,7 +156,12 @@ class EasyCareBPCLight(EasyCareBPCEntity[EasyCareBPCCoordinator], LightEntity):
             action="on",
             duration_minutes=duration_minutes,
         )
-        await self.coordinator.async_request_immediate_refresh()
+        # Mise à jour optimiste immédiate : l'UI bascule à On avec le temps estimé.
+        # Pas de refresh immédiat — le BPC a besoin de temps pour traiter la commande ;
+        # le poll naturel (1 min en mode actif) récupérera l'état confirmé.
+        self._optimistic_is_on = True
+        self._optimistic_remaining = f"{duration_hours:02.0f}:00"
+        self.async_write_ha_state()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Éteint la lumière via la commande BPC manual."""
@@ -139,7 +180,10 @@ class EasyCareBPCLight(EasyCareBPCEntity[EasyCareBPCCoordinator], LightEntity):
             index=self._bpc_index,
             action="off",
         )
-        await self.coordinator.async_request_immediate_refresh()
+        # Mise à jour optimiste immédiate : l'UI bascule à Off.
+        self._optimistic_is_on = False
+        self._optimistic_remaining = "00:00"
+        self.async_write_ha_state()
 
     def _get_configured_duration_hours(self) -> float:
         """Lit la durée configurée depuis l'entité number associée.
