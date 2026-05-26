@@ -524,6 +524,7 @@ class EasyCareDetailSensor(EasyCareWATBOXEntity[EasyCareUserCoordinator], Sensor
             "address": p.address,
             "latitude": p.latitude,
             "longitude": p.longitude,
+            "custom_photo": p.custom_photo or None,
         }
 
 
