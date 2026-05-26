@@ -519,12 +519,14 @@ class EasyCareDetailSensor(EasyCareWATBOXEntity[EasyCareUserCoordinator], Sensor
         if self.coordinator.data is None:
             return {}
         p = self.coordinator.data.pool
+        last_update = self.coordinator.last_update_success_time
         return {
             "volume_m3": p.volume,
             "address": p.address,
             "latitude": p.latitude,
             "longitude": p.longitude,
             "custom_photo": p.custom_photo or None,
+            "last_update": last_update.isoformat() if last_update else None,
         }
 
 
