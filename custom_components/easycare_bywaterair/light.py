@@ -113,27 +113,23 @@ class EasyCareBPCLight(EasyCareBPCEntity[EasyCareBPCCoordinator], LightEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Temps restant de la voie et date de dernière mise à jour en attributs.
+        """Temps restant de la voie en attribut.
 
         Si un état optimiste est actif, le temps restant estimé est retourné
         à la place de la valeur du coordinateur (encore potentiellement obsolète).
         """
-        last_update = getattr(self.coordinator, "last_update_success_time", None)
-        attrs: dict[str, Any] = {
-            "last_update": last_update.isoformat() if last_update else None,
-        }
         if self._optimistic_remaining is not None:
-            attrs["remaining_time"] = self._optimistic_remaining
-            return attrs
+            return {"remaining_time": self._optimistic_remaining}
         data = self.coordinator.data
         if data is None:
-            return attrs
+            return {}
         bpc_input = data.get_input(self._bpc_index)
         if bpc_input is None:
-            return attrs
-        attrs["remaining_time"] = bpc_input.remaining_time
-        attrs["bpc_index"] = self._bpc_index
-        return attrs
+            return {}
+        return {
+            "remaining_time": bpc_input.remaining_time,
+            "bpc_index": self._bpc_index,
+        }
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Allume la lumière via la commande BPC manual."""
