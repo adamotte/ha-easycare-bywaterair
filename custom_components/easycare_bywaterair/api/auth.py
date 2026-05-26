@@ -185,6 +185,17 @@ class EasyCareAuth:
                     "Le refresh_token Azure B2C est expiré ou révoqué."
                 ) from err
             raise
+        except EasyCareInvalidResponseError as err:
+            # Azure B2C retourne parfois une page HTML (HTTP 200) au lieu d'un JSON
+            # {"error": "invalid_grant"} quand le refresh_token est expiré.
+            _LOGGER.warning(
+                "Réponse non-JSON du token endpoint Azure B2C (page HTML ?) — "
+                "refresh_token probablement expiré → ré-authentification requise"
+            )
+            raise EasyCareTokenExpiredError(
+                "Azure B2C a retourné une réponse non-JSON : "
+                "refresh_token expiré ou session invalide."
+            ) from err
 
         try:
             new_tokens = OAuthTokens.from_api(data)
@@ -226,8 +237,16 @@ class EasyCareAuth:
                         f"Réponse non-JSON de tokenFromAzureADB2CIdToken : {err}"
                     ) from err
         except asyncio.TimeoutError as err:
+            _LOGGER.error(
+                "Timeout (%ds) sur tokenFromAzureADB2CIdToken — serveur Waterair injoignable",
+                HTTP_TIMEOUT_AUTH,
+            )
             raise EasyCareTimeoutError("Timeout lors de l'obtention du bearer") from err
         except ClientError as err:
+            _LOGGER.error(
+                "Erreur réseau sur tokenFromAzureADB2CIdToken : %s: %s",
+                type(err).__name__, err,
+            )
             raise EasyCareConnectionError(f"Erreur réseau : {err}") from err
 
         bearer = BearerToken.from_api(data)
@@ -305,7 +324,7 @@ class EasyCareAuth:
                 try:
                     return json.loads(body)
                 except ValueError as err:
-                    _LOGGER.debug("OAuth /token corps brut : %r", body[:300])
+                    _LOGGER.warning("OAuth /token corps brut (non-JSON) : %r", body[:200])
                     raise EasyCareInvalidResponseError(f"Réponse OAuth non-JSON : {err}") from err
         except asyncio.TimeoutError as err:
             raise EasyCareTimeoutError("Timeout sur l'endpoint OAuth /token") from err
