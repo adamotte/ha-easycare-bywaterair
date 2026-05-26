@@ -26,7 +26,6 @@ from ..const import (
     API_HOST_EASYCARE,
     API_PATH_TOKEN_FROM_B2C,
     HTTP_TIMEOUT_AUTH,
-    ID_TOKEN_REFRESH_MARGIN_SECONDS,
     OAUTH_AUTHORIZE_URL,
     OAUTH_CLIENT_ID,
     OAUTH_CODE_CHALLENGE,
@@ -271,18 +270,27 @@ class EasyCareAuth:
             if self._oauth_tokens is None:
                 raise EasyCareAuthError("Pas de tokens Azure disponibles")
 
-            if self._oauth_tokens.is_expired(margin_seconds=ID_TOKEN_REFRESH_MARGIN_SECONDS):
-                _LOGGER.debug("id_token Azure expire bientôt → refresh proactif")
-                await self.refresh_tokens()
-                return self._bearer.bearer  # type: ignore[union-attr]
-
-            if self._bearer is None or self._bearer.is_expired(
+            # Bearer encore valide → retour immédiat, sans aucun appel Azure B2C.
+            # On ne touche pas à l'id_token tant que le bearer tient : si le bearer
+            # EasyCare dure plusieurs heures/jours, inutile de rafraîchir les tokens
+            # Azure toutes les heures.
+            if self._bearer is not None and not self._bearer.is_expired(
                 margin_seconds=BEARER_REFRESH_MARGIN_SECONDS
             ):
-                _LOGGER.debug("Bearer EasyCare expire bientôt → renouvellement")
+                return self._bearer.bearer
+
+            # Bearer expiré ou absent — renouvellement nécessaire.
+            # Si l'id_token est encore utilisable, on renouvelle le bearer directement
+            # sans passer par le refresh_token Azure B2C.
+            if not self._oauth_tokens.is_expired(margin_seconds=0):
+                _LOGGER.debug("Bearer EasyCare expiré → renouvellement depuis id_token existant")
                 await self._refresh_bearer_from_id_token(self._oauth_tokens.id_token)
                 await self._notify_tokens_updated()
+                return self._bearer.bearer  # type: ignore[union-attr]
 
+            # id_token également expiré → refresh Azure B2C nécessaire.
+            _LOGGER.debug("Bearer et id_token expirés → refresh Azure B2C via refresh_token")
+            await self.refresh_tokens()
             return self._bearer.bearer  # type: ignore[union-attr]
 
     async def invalidate_bearer(self) -> None:
