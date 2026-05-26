@@ -1,7 +1,5 @@
-**Correction : crash au démarrage introduit en v0.5.3**
+**Correction : attribut `last_update` sur le sensor de détail piscine**
 
-L'attribut `last_update` utilisé dans v0.5.3 reposait sur un attribut interne de Home Assistant qui n'existe pas. Cela provoquait un crash empêchant le chargement des sensors et des lumières sur toutes les installations.
+L'attribut `last_update` reflète maintenant l'horodatage exact du dernier appel réussi de HA vers l'API Waterair (toutes les 30 minutes), et non plus les dates de mesure des capteurs.
 
-**Ce qui est corrigé :**
-- `last_update` sur le sensor de détail piscine affiche maintenant la date de la mesure la plus récente retournée par l'API Waterair (parmi pH, chlore, température, pression) — fiable et indépendant de la version HA
-- L'attribut `last_update` est retiré des entités lumières où il n'avait pas de source de données exploitable
+Cela permet de vérifier que HA récupère bien les données régulièrement, même quand les valeurs des capteurs n'ont pas changé — ce qui est fréquent avec Waterair qui ne pousse de nouvelles mesures que sur changement pour préserver les piles LoRa.
