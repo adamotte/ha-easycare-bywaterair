@@ -122,6 +122,12 @@ class EasyCareUserCoordinator(DataUpdateCoordinator[UserData]):
             update_interval=SCAN_INTERVAL_USER,
         )
         self._client = client
+        self._last_fetched_at: datetime | None = None
+
+    @property
+    def last_fetched_at(self) -> datetime | None:
+        """Horodatage du dernier fetch réussi auprès de l'API."""
+        return self._last_fetched_at
 
     async def _async_update_data(self) -> UserData:
         """Récupère les données utilisateur et métriques."""
@@ -154,6 +160,7 @@ class EasyCareUserCoordinator(DataUpdateCoordinator[UserData]):
             )
             metrics = prev.metrics
 
+        self._last_fetched_at = datetime.now(tz=timezone.utc)
         _LOGGER.debug("User update OK : pH=%s, T=%s°C", metrics.ph_value, metrics.temperature_value)
         return UserData(client=client, pool=pool, metrics=metrics, alerts=alerts, treatment=treatment)
 
