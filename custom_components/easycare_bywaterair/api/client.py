@@ -61,6 +61,7 @@ from .models import (
     Alerts,
     BPCInput,
     Client,
+    FilterSchedule,
     Metrics,
     Module,
     Pool,
@@ -218,22 +219,23 @@ class EasyCareClient:
 
     async def get_bpc_programs_data(
         self,
-    ) -> tuple[str | None, int, dict | None, dict | None]:
+    ) -> tuple[str | None, int, dict | None, dict | None, FilterSchedule | None]:
         """Lit les programmes BPC pour la pompe et les lumières.
 
-        Pompe (index 0) — mode de filtration et adaptOffset :
+        Pompe (index 0) — mode de filtration, adaptOffset et planning de filtration :
           mode=0 → MANUAL, mode=1 → CONTINUOUS,
           mode=2 + rule=1 → AUTO, mode=2 + rule=0 → PROG.
+          sched (racine du programme) → FilterSchedule pour les plages horaires.
 
         Lumières (index 1=spot, index 2=escalight) — `programCharacteristics`
         brut retourné tel quel pour un parsing défensif côté coordinator.
 
         Returns:
-            Tuple (filtration_mode, adapt_offset, spot_program, escalight_program).
+            Tuple (filtration_mode, adapt_offset, spot_program, escalight_program, filter_schedule).
             filtration_mode est None si les modules ne sont pas disponibles.
         """
         if self._watbox is None or self._bpc is None:
-            return None, 0, None, None
+            return None, 0, None, None, None
         path = API_PATH_BPC_PROGRAMS.format(
             watbox_serial=self._watbox.serial_number, bpc_name=self._bpc.short_name,
         )
@@ -244,6 +246,7 @@ class EasyCareClient:
         adapt_offset: int = 0
         spot_program: dict | None = None
         escalight_program: dict | None = None
+        filter_schedule: FilterSchedule | None = None
 
         for prog in programs:
             idx = prog.get("index")
@@ -279,6 +282,16 @@ class EasyCareClient:
                     filtration_mode = "AUTO"
                 else:
                     filtration_mode = "PROG"
+                # Planning de filtration — sched est à la racine du programme, pas dans charac.
+                filter_schedule = FilterSchedule.from_program_characteristics(
+                    charac, sched=sched_val
+                )
+                _LOGGER.debug(
+                    "BPC programmes — FilterSchedule : ths=%s sched_rows=%s rules=%d",
+                    filter_schedule.thresholds,
+                    len(filter_schedule.sched) if filter_schedule.sched else 0,
+                    len(filter_schedule.rules),
+                )
             elif idx == 1:
                 spot_program = dict(charac)
                 _LOGGER.debug("BPC programmes — spot (index 1) programCharacteristics : %s", charac)
@@ -286,7 +299,7 @@ class EasyCareClient:
                 escalight_program = dict(charac)
                 _LOGGER.debug("BPC programmes — escalight (index 2) programCharacteristics : %s", charac)
 
-        return filtration_mode, adapt_offset, spot_program, escalight_program
+        return filtration_mode, adapt_offset, spot_program, escalight_program, filter_schedule
 
     async def set_bpc_manual(
         self,

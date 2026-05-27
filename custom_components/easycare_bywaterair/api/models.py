@@ -468,17 +468,24 @@ class FilterSchedule:
     rules: tuple[CyclicRule, ...] = ()
 
     @classmethod
-    def from_program_characteristics(cls, charac: dict[str, Any]) -> FilterSchedule:
-        """Parse le bloc programCharacteristics du programme pompe (index=0)."""
+    def from_program_characteristics(
+        cls, charac: dict[str, Any], *, sched: Any = None
+    ) -> FilterSchedule:
+        """Parse le bloc programCharacteristics du programme pompe (index=0).
+
+        Args:
+            charac: bloc programCharacteristics (contient ths, cyclic, mode, rule…).
+            sched : matrice sched brute au niveau racine du programme (pas dans charac).
+        """
         ths = tuple(int(t) for t in (charac.get("ths") or []))
 
-        # Matrice sched — 7 lignes × 12 colonnes de masques 24 bits
-        raw_sched = charac.get("sched")
-        sched: tuple[tuple[int, ...], ...] | None = None
-        if isinstance(raw_sched, list):
-            sched = tuple(
+        # Matrice sched — 7 lignes × 12 colonnes de masques 24 bits.
+        # Transmise depuis la racine du programme (prog.get("sched")), pas depuis charac.
+        parsed_sched: tuple[tuple[int, ...], ...] | None = None
+        if isinstance(sched, list):
+            parsed_sched = tuple(
                 tuple(int(v) for v in row)
-                for row in raw_sched
+                for row in sched
                 if isinstance(row, list)
             )
 
@@ -494,7 +501,7 @@ class FilterSchedule:
                 period_min=int(entry.get("per", 1)),
             ))
 
-        return cls(thresholds=ths, sched=sched, rules=tuple(rules))
+        return cls(thresholds=ths, sched=parsed_sched, rules=tuple(rules))
 
     def active_threshold_index_for_temp(self, temperature: float) -> int | None:
         """Retourne l'index du seuil actif dans `thresholds` pour une température donnée.
