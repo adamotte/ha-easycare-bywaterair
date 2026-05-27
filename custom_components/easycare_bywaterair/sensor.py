@@ -337,10 +337,19 @@ class EasyCarePumpStateSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], SensorE
 
 
 class EasyCareFiltrationModeSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], SensorEntity):
-    """Mode de filtration actuel : AUTO-2H / AUTO / AUTO+2H / CONTINUOUS / MANUAL / PROG."""
+    """Mode de filtration actuel — labels identiques à l'app mobile Waterair.
+
+    AUTO-2H / AUTO / AUTO+2H / ON (marche forcée) / OFF (arrêt) / PROG
+    """
 
     _attr_translation_key = "filtration_mode"
     _attr_icon = "mdi:water-sync"
+
+    # Mapping interne API → label affiché (identique app mobile)
+    _MODE_LABELS: dict[str, str] = {
+        "CONTINUOUS": "ON",
+        "MANUAL": "OFF",
+    }
 
     def __init__(self, coordinator: EasyCareBPCCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator, entry, unique_id_suffix="filtration_mode")
@@ -350,13 +359,16 @@ class EasyCareFiltrationModeSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], Se
         if self.coordinator.data is None:
             return None
         mode = self.coordinator.data.filtration_mode
+        if mode is None:
+            return None
         if mode == MODE_AUTO:
             offset = self.coordinator.data.adapt_offset
             if offset == ADAPT_OFFSET_MINUS:
                 return MODE_AUTO_MINUS
             if offset == ADAPT_OFFSET_PLUS:
                 return MODE_AUTO_PLUS
-        return mode
+            return MODE_AUTO
+        return self._MODE_LABELS.get(mode, mode)
 
 
 class EasyCarePumpTotalRuntimeSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], SensorEntity):
