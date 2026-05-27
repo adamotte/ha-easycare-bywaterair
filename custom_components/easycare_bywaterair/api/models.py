@@ -8,7 +8,7 @@ un dict JSON brut. Les champs critiques manquants lèvent `EasyCareInvalidRespon
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from .exceptions import EasyCareInvalidResponseError
@@ -425,6 +425,219 @@ class BPCInput:
             temp_ref=int(temp_ref_raw) if temp_ref_raw is not None else None,
             raw=data,
         )
+
+
+@dataclass(frozen=True, slots=True)
+class CyclicRule:
+    """Une règle cyclic de filtration pour un seuil de température.
+
+    threshold_index : index dans le tableau `ths` du programCharacteristics.
+    threshold_temp  : température seuil en °C (ths[threshold_index]), None si hors limites.
+    duration_min    : durée de filtration par cycle (minutes).
+    period_min      : période entre le début de deux cycles (minutes).
+    """
+
+    threshold_index: int
+    threshold_temp: int | None
+    duration_min: int
+    period_min: int
+
+    @property
+    def daily_hours(self) -> float:
+        """Durée de filtration journalière en heures."""
+        if self.period_min <= 0:
+            return 0.0
+        return round((self.duration_min / self.period_min) * 24, 2)
+
+
+@dataclass(frozen=True, slots=True)
+class FilterSchedule:
+    """Programme de filtration de la pompe (programme index=0).
+
+    thresholds : tableau brut `ths` (seuils de température en °C).
+                 Valeur sentinelle 127 (0x7F) = jamais actif.
+    sched      : matrice 7×12 de masques 24 bits (7 jours × 12 seuils).
+                 Bit N = 1 → la pompe filtre pendant l'heure N.
+                 Toutes les lignes sont identiques en mode AUTO.
+                 Source de vérité pour les plages horaires.
+    rules      : règles cyclic brutes (champ `cyclic`) — info complémentaire.
+    """
+
+    thresholds: tuple[int, ...]
+    sched: tuple[tuple[int, ...], ...] | None = None
+    rules: tuple[CyclicRule, ...] = ()
+
+    @classmethod
+    def from_program_characteristics(
+        cls, charac: dict[str, Any], *, sched: Any = None
+    ) -> FilterSchedule:
+        """Parse le bloc programCharacteristics du programme pompe (index=0).
+
+        Args:
+            charac: bloc programCharacteristics (contient ths, cyclic, mode, rule…).
+            sched : matrice sched brute au niveau racine du programme (pas dans charac).
+        """
+        ths = tuple(int(t) for t in (charac.get("ths") or []))
+
+        # Matrice sched — 7 lignes × 12 colonnes de masques 24 bits.
+        # Transmise depuis la racine du programme (prog.get("sched")), pas depuis charac.
+        parsed_sched: tuple[tuple[int, ...], ...] | None = None
+        if isinstance(sched, list):
+            parsed_sched = tuple(
+                tuple(int(v) for v in row)
+                for row in sched
+                if isinstance(row, list)
+            )
+
+        # Règles cyclic — info complémentaire sur les durées/périodes
+        rules: list[CyclicRule] = []
+        for entry in (charac.get("cyclic") or []):
+            th_idx = int(entry.get("th", 0))
+            temp = ths[th_idx] if th_idx < len(ths) else None
+            rules.append(CyclicRule(
+                threshold_index=th_idx,
+                threshold_temp=temp,
+                duration_min=int(entry.get("dur", 0)),
+                period_min=int(entry.get("per", 1)),
+            ))
+
+        return cls(thresholds=ths, sched=parsed_sched, rules=tuple(rules))
+
+    def active_threshold_index_for_temp(self, temperature: float) -> int | None:
+        """Retourne l'index du seuil actif dans `thresholds` pour une température donnée.
+
+        Sélectionne le seuil le plus élevé parmi ceux ≤ température.
+        Exclut la valeur sentinelle 127.
+        """
+        best_idx: int | None = None
+        best_temp: int | None = None
+        for i, th in enumerate(self.thresholds):
+            if th != 127 and th <= temperature:
+                if best_temp is None or th > best_temp:
+                    best_temp = th
+                    best_idx = i
+        return best_idx
+
+    def active_bitmask_for_temp(self, temperature: float) -> int | None:
+        """Retourne le masque 24 bits actif pour une température donnée.
+
+        Utilise la première ligne de `sched` (toutes identiques en mode AUTO).
+        Retourne None si `sched` est absent ou le seuil hors limites.
+        """
+        if not self.sched:
+            return None
+        idx = self.active_threshold_index_for_temp(temperature)
+        if idx is None:
+            return None
+        row = self.sched[0]
+        if idx >= len(row):
+            return None
+        return row[idx]
+
+    def daily_hours_from_sched(self, temperature: float) -> float | None:
+        """Durée de filtration journalière en heures depuis le masque sched (popcount).
+
+        Plus précis que le calcul dur/per : tient compte des plages horaires réelles.
+        """
+        mask = self.active_bitmask_for_temp(temperature)
+        if mask is None:
+            return None
+        return float(bin(mask).count("1"))
+
+    def filter_windows_from_sched(self, temperature: float) -> list[tuple[int, int]] | None:
+        """Retourne les créneaux actifs [(début_h, fin_h), ...] depuis le masque sched.
+
+        fin_h est exclusive : (10, 16) = 10h→16h.
+        Peut retourner plusieurs créneaux (ex. mode hors-gel : [(5, 7), (22, 23)]).
+        """
+        mask = self.active_bitmask_for_temp(temperature)
+        if mask is None:
+            return None
+        windows: list[tuple[int, int]] = []
+        start: int | None = None
+        for h in range(24):
+            if mask & (1 << h):
+                if start is None:
+                    start = h
+            else:
+                if start is not None:
+                    windows.append((start, h))
+                    start = None
+        if start is not None:
+            windows.append((start, 24))
+        return windows
+
+    def active_rule_for_temp(self, temperature: float) -> CyclicRule | None:
+        """Retourne la règle cyclic active pour une température donnée (fallback).
+
+        À utiliser uniquement si `sched` est absent.
+        """
+        best: CyclicRule | None = None
+        for rule in self.rules:
+            if rule.threshold_temp is not None and rule.threshold_temp <= temperature:
+                if best is None or rule.threshold_temp > (best.threshold_temp or 0):
+                    best = rule
+        return best
+
+    def next_filtration_events(
+        self, temperature: float, now: datetime
+    ) -> tuple[datetime | None, datetime | None]:
+        """Retourne (prochain_démarrage, prochain_arrêt) selon l'heure actuelle.
+
+        Sémantique :
+          - Si la pompe est actuellement dans une plage :
+              prochain_démarrage = début de la plage suivante (demain si dernière du jour)
+              prochain_arrêt     = fin de la plage courante
+          - Si la pompe n'est pas dans une plage :
+              prochain_démarrage = début de la prochaine plage (demain si toutes passées)
+              prochain_arrêt     = fin de cette prochaine plage
+
+        Args:
+            temperature: température de l'eau en °C.
+            now        : datetime courant (timezone-aware recommandé).
+
+        Returns:
+            Tuple (next_start, next_end). Les deux sont None si sched absent ou vide.
+        """
+        windows = self.filter_windows_from_sched(temperature)
+        if not windows:
+            return None, None
+
+        current_h = now.hour
+        today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        tomorrow = today + timedelta(days=1)
+
+        def _make_dt(base: datetime, h: int) -> datetime:
+            """Heure h dans la journée de base (h=24 → minuit du lendemain)."""
+            if h >= 24:
+                return base + timedelta(days=1)
+            return base.replace(hour=h)
+
+        # Cherche si on est dans une plage courante
+        current_idx: int | None = None
+        for i, (start_h, end_h) in enumerate(windows):
+            if start_h <= current_h < end_h:
+                current_idx = i
+                break
+
+        if current_idx is not None:
+            # On est dans une plage — arrêt = fin courante, démarrage = plage suivante
+            _, end_h = windows[current_idx]
+            next_stop = _make_dt(today, end_h)
+            if current_idx + 1 < len(windows):
+                next_start = _make_dt(today, windows[current_idx + 1][0])
+            else:
+                next_start = _make_dt(tomorrow, windows[0][0])
+            return next_start, next_stop
+
+        # On n'est pas dans une plage — cherche la prochaine
+        for start_h, end_h in windows:
+            if start_h > current_h:
+                return _make_dt(today, start_h), _make_dt(today, end_h)
+
+        # Toutes les plages du jour sont passées → première plage de demain
+        first_start, first_end = windows[0]
+        return _make_dt(tomorrow, first_start), _make_dt(tomorrow, first_end)
 
 
 @dataclass(frozen=True, slots=True)

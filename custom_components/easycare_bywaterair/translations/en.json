@@ -124,7 +124,10 @@
       "spot_mode": {"name": "Spotlight mode"},
       "escalight_mode": {"name": "Step lighting mode"},
       "owner": {"name": "Account owner"},
-      "detail": {"name": "Pool model"}
+      "detail": {"name": "Pool model"},
+      "filtration_daily_duration": {"name": "Filtration duration (daily)"},
+      "filtration_next_start": {"name": "Next filtration start"},
+      "filtration_next_end": {"name": "Next filtration end"}
     }
   },
   "services": {
