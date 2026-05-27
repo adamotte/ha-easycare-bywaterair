@@ -565,10 +565,10 @@ class EasyCareDetailSensor(EasyCareWATBOXEntity[EasyCareUserCoordinator], Sensor
 
 
 class EasyCareFiltrationDurationSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], SensorEntity):
-    """Durée de filtration journalière calculée depuis le programme cyclic actif.
+    """Durée de filtration journalière depuis les masques horaires BPC (sched).
 
-    La règle active est celle dont le seuil de température est le plus élevé
-    parmi ceux inférieurs ou égaux à la température actuelle de l'eau.
+    Calcul par popcount du masque 24 bits actif pour la température courante.
+    Fallback sur le ratio dur/per (cyclic) si sched est absent.
     La température est lue en snapshot depuis EasyCareUserCoordinator.
     Retourne None (unavailable) si la température n'est pas disponible.
     """
@@ -589,6 +589,12 @@ class EasyCareFiltrationDurationSensor(EasyCareBPCEntity[EasyCareBPCCoordinator]
         super().__init__(coordinator, entry, unique_id_suffix="filtration_daily_duration")
         self._user_coordinator = user_coordinator
 
+    def _get_temperature(self) -> float | None:
+        """Lecture snapshot de la température AC1 (pas d'abonnement au coordinateur user)."""
+        if self._user_coordinator.data is None:
+            return None
+        return self._user_coordinator.data.metrics.temperature_value
+
     @property
     def native_value(self) -> float | None:
         if self.coordinator.data is None:
@@ -596,12 +602,14 @@ class EasyCareFiltrationDurationSensor(EasyCareBPCEntity[EasyCareBPCCoordinator]
         schedule = self.coordinator.data.filter_schedule
         if schedule is None:
             return None
-        # Lecture snapshot — pas d'abonnement aux updates du coordinateur user
-        temperature: float | None = None
-        if self._user_coordinator.data is not None:
-            temperature = self._user_coordinator.data.metrics.temperature_value
+        temperature = self._get_temperature()
         if temperature is None:
             return None
+        # Source primaire : masque sched (popcount) — précis à l'heure près
+        hours = schedule.daily_hours_from_sched(temperature)
+        if hours is not None:
+            return hours
+        # Fallback : ratio dur/per depuis les règles cyclic
         rule = schedule.active_rule_for_temp(temperature)
         return rule.daily_hours if rule is not None else None
 
@@ -612,28 +620,24 @@ class EasyCareFiltrationDurationSensor(EasyCareBPCEntity[EasyCareBPCCoordinator]
         schedule = self.coordinator.data.filter_schedule
         if schedule is None:
             return {}
-        temperature: float | None = None
-        if self._user_coordinator.data is not None:
-            temperature = self._user_coordinator.data.metrics.temperature_value
-        rule = schedule.active_rule_for_temp(temperature) if temperature is not None else None
-        return {
-            "thresholds_c": list(schedule.thresholds),
-            "cyclic_rules": [
-                {
-                    "threshold_index": r.threshold_index,
-                    "threshold_temp_c": r.threshold_temp,
-                    "duration_min": r.duration_min,
-                    "period_min": r.period_min,
-                    "daily_hours": r.daily_hours,
-                }
-                for r in schedule.rules
-            ],
-            "active_threshold_temp_c": rule.threshold_temp if rule is not None else None,
-            # Champs bruts pour décoder l'encodage des plages horaires (spON/spFF/spSeq)
-            "raw_sp_on": schedule.sp_on,
-            "raw_sp_ff": schedule.sp_ff,
-            "raw_sp_seq": schedule.sp_seq,
-        }
+        temperature = self._get_temperature()
+
+        attrs: dict[str, Any] = {"thresholds_c": list(schedule.thresholds)}
+
+        if temperature is not None:
+            idx = schedule.active_threshold_index_for_temp(temperature)
+            attrs["active_threshold_temp_c"] = (
+                schedule.thresholds[idx] if idx is not None else None
+            )
+            windows = schedule.filter_windows_from_sched(temperature)
+            if windows is not None:
+                attrs["filter_windows"] = [
+                    {"start_h": s, "end_h": e} for s, e in windows
+                ]
+        else:
+            attrs["active_threshold_temp_c"] = None
+
+        return attrs
 
 
 def _derive_light_mode(program: dict | None) -> str | None:

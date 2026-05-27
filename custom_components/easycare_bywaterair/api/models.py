@@ -452,25 +452,37 @@ class CyclicRule:
 
 @dataclass(frozen=True, slots=True)
 class FilterSchedule:
-    """Programme de filtration cyclique de la pompe (programme index=0).
+    """Programme de filtration de la pompe (programme index=0).
 
-    rules      : règles cyclic triées telles que retournées par l'API.
     thresholds : tableau brut `ths` (seuils de température en °C).
-    sp_on      : champ brut spON (encodage plage horaire — non encore décodé).
-    sp_ff      : champ brut spFF (encodage plage horaire — non encore décodé).
-    sp_seq     : champ brut spSeq (encodage plage horaire — non encore décodé).
+                 Valeur sentinelle 127 (0x7F) = jamais actif.
+    sched      : matrice 7×12 de masques 24 bits (7 jours × 12 seuils).
+                 Bit N = 1 → la pompe filtre pendant l'heure N.
+                 Toutes les lignes sont identiques en mode AUTO.
+                 Source de vérité pour les plages horaires.
+    rules      : règles cyclic brutes (champ `cyclic`) — info complémentaire.
     """
 
-    rules: tuple[CyclicRule, ...]
     thresholds: tuple[int, ...]
-    sp_on: int | None = None
-    sp_ff: int | None = None
-    sp_seq: int | None = None
+    sched: tuple[tuple[int, ...], ...] | None = None
+    rules: tuple[CyclicRule, ...] = ()
 
     @classmethod
     def from_program_characteristics(cls, charac: dict[str, Any]) -> FilterSchedule:
         """Parse le bloc programCharacteristics du programme pompe (index=0)."""
         ths = tuple(int(t) for t in (charac.get("ths") or []))
+
+        # Matrice sched — 7 lignes × 12 colonnes de masques 24 bits
+        raw_sched = charac.get("sched")
+        sched: tuple[tuple[int, ...], ...] | None = None
+        if isinstance(raw_sched, list):
+            sched = tuple(
+                tuple(int(v) for v in row)
+                for row in raw_sched
+                if isinstance(row, list)
+            )
+
+        # Règles cyclic — info complémentaire sur les durées/périodes
         rules: list[CyclicRule] = []
         for entry in (charac.get("cyclic") or []):
             th_idx = int(entry.get("th", 0))
@@ -482,25 +494,76 @@ class FilterSchedule:
                 period_min=int(entry.get("per", 1)),
             ))
 
-        def _opt_int(v: Any) -> int | None:
-            try:
-                return int(v) if v is not None else None
-            except (TypeError, ValueError):
-                return None
+        return cls(thresholds=ths, sched=sched, rules=tuple(rules))
 
-        return cls(
-            rules=tuple(rules),
-            thresholds=ths,
-            sp_on=_opt_int(charac.get("spON")),
-            sp_ff=_opt_int(charac.get("spFF")),
-            sp_seq=_opt_int(charac.get("spSeq")),
-        )
+    def active_threshold_index_for_temp(self, temperature: float) -> int | None:
+        """Retourne l'index du seuil actif dans `thresholds` pour une température donnée.
+
+        Sélectionne le seuil le plus élevé parmi ceux ≤ température.
+        Exclut la valeur sentinelle 127.
+        """
+        best_idx: int | None = None
+        best_temp: int | None = None
+        for i, th in enumerate(self.thresholds):
+            if th != 127 and th <= temperature:
+                if best_temp is None or th > best_temp:
+                    best_temp = th
+                    best_idx = i
+        return best_idx
+
+    def active_bitmask_for_temp(self, temperature: float) -> int | None:
+        """Retourne le masque 24 bits actif pour une température donnée.
+
+        Utilise la première ligne de `sched` (toutes identiques en mode AUTO).
+        Retourne None si `sched` est absent ou le seuil hors limites.
+        """
+        if not self.sched:
+            return None
+        idx = self.active_threshold_index_for_temp(temperature)
+        if idx is None:
+            return None
+        row = self.sched[0]
+        if idx >= len(row):
+            return None
+        return row[idx]
+
+    def daily_hours_from_sched(self, temperature: float) -> float | None:
+        """Durée de filtration journalière en heures depuis le masque sched (popcount).
+
+        Plus précis que le calcul dur/per : tient compte des plages horaires réelles.
+        """
+        mask = self.active_bitmask_for_temp(temperature)
+        if mask is None:
+            return None
+        return float(bin(mask).count("1"))
+
+    def filter_windows_from_sched(self, temperature: float) -> list[tuple[int, int]] | None:
+        """Retourne les créneaux actifs [(début_h, fin_h), ...] depuis le masque sched.
+
+        fin_h est exclusive : (10, 16) = 10h→16h.
+        Peut retourner plusieurs créneaux (ex. mode hors-gel : [(5, 7), (22, 23)]).
+        """
+        mask = self.active_bitmask_for_temp(temperature)
+        if mask is None:
+            return None
+        windows: list[tuple[int, int]] = []
+        start: int | None = None
+        for h in range(24):
+            if mask & (1 << h):
+                if start is None:
+                    start = h
+            else:
+                if start is not None:
+                    windows.append((start, h))
+                    start = None
+        if start is not None:
+            windows.append((start, 24))
+        return windows
 
     def active_rule_for_temp(self, temperature: float) -> CyclicRule | None:
-        """Retourne la règle active pour une température donnée.
+        """Retourne la règle cyclic active pour une température donnée (fallback).
 
-        Cherche la règle dont le seuil est le plus élevé parmi ceux
-        inférieurs ou égaux à `temperature` (logique de palier).
+        À utiliser uniquement si `sched` est absent.
         """
         best: CyclicRule | None = None
         for rule in self.rules:
