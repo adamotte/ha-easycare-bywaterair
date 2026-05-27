@@ -1,5 +1,27 @@
-**Correction : attribut `last_update` sur le sensor de détail piscine**
+## ⚠️ Changement important — mise à jour des automations requise
 
-L'attribut `last_update` reflète maintenant l'horodatage exact du dernier appel réussi de HA vers l'API Waterair (toutes les 30 minutes), et non plus les dates de mesure des capteurs.
+Cette version renomme les valeurs d'état des entités `select` et `sensor` pour se conformer aux exigences de hassfest (validation officielle Home Assistant). Les nouvelles valeurs sont en minuscules et sans caractères spéciaux.
 
-Cela permet de vérifier que HA récupère bien les données régulièrement, même quand les valeurs des capteurs n'ont pas changé — ce qui est fréquent avec Waterair qui ne pousse de nouvelles mesures que sur changement pour préserver les piles LoRa.
+**Si vous avez des automations qui comparent ces valeurs, mettez-les à jour :**
+
+| Ancienne valeur | Nouvelle valeur |
+|---|---|
+| `AUTO-2H` | `auto_minus_2h` |
+| `AUTO` | `auto` |
+| `AUTO+2H` | `auto_plus_2h` |
+| `CONTINUOUS` | `continuous` |
+| `MANUAL` | `manual` |
+| `BOOST4H` | `boost_4h` |
+| `BOOST12H` | `boost_12h` |
+| `BOOST24H` | `boost_24h` |
+| `BOOST36H` | `boost_36h` |
+| `BOOST48H` | `boost_48h` |
+| `BOOST72H` | `boost_72h` |
+| `ACTIVE` | `active` |
+
+---
+
+## Autres changements
+
+- **Manifest corrigé** : ordre des clés conforme à la spécification HA
+- **CI ajoutée** : workflows GitHub Actions pour la validation HACS et hassfest, exécutés à chaque push
