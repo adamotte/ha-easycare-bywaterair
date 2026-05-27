@@ -49,6 +49,7 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.util import dt as dt_util
 
 from .const import (
     ADAPT_OFFSET_MINUS,
@@ -107,6 +108,8 @@ async def async_setup_entry(
             EasyCarePumpCounterDateSensor(coords.bpc, entry),
             EasyCareBoostRemainingSensor(coords.bpc, entry),
             EasyCareFiltrationDurationSensor(coords.bpc, coords.user, entry),
+            EasyCareFiltrationNextStartSensor(coords.bpc, coords.user, entry),
+            EasyCareFiltrationNextEndSensor(coords.bpc, coords.user, entry),
         ])
         n = bpc.number_of_inputs
         if n >= 1:
@@ -638,6 +641,103 @@ class EasyCareFiltrationDurationSensor(EasyCareBPCEntity[EasyCareBPCCoordinator]
             attrs["active_threshold_temp_c"] = None
 
         return attrs
+
+
+class _FiltrationScheduleSensorBase(EasyCareBPCEntity[EasyCareBPCCoordinator], SensorEntity):
+    """Classe de base pour les sensors de planning de filtration.
+
+    Partage la logique d'accès au FilterSchedule et à la température.
+    """
+
+    def __init__(
+        self,
+        coordinator: EasyCareBPCCoordinator,
+        user_coordinator: EasyCareUserCoordinator,
+        entry: ConfigEntry,
+        *,
+        unique_id_suffix: str,
+    ) -> None:
+        super().__init__(coordinator, entry, unique_id_suffix=unique_id_suffix)
+        self._user_coordinator = user_coordinator
+
+    def _get_temperature(self) -> float | None:
+        """Lecture snapshot de la température AC1."""
+        if self._user_coordinator.data is None:
+            return None
+        return self._user_coordinator.data.metrics.temperature_value
+
+
+class EasyCareFiltrationNextStartSensor(_FiltrationScheduleSensorBase):
+    """Prochain démarrage programmé de la filtration.
+
+    Si la pompe est actuellement en filtration, indique le démarrage de la
+    prochaine plage (après la plage courante).
+    Si la pompe n'est pas en filtration, indique le démarrage de la prochaine plage.
+    """
+
+    _attr_translation_key = "filtration_next_start"
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_icon = "mdi:timer-play-outline"
+
+    def __init__(
+        self,
+        coordinator: EasyCareBPCCoordinator,
+        user_coordinator: EasyCareUserCoordinator,
+        entry: ConfigEntry,
+    ) -> None:
+        super().__init__(
+            coordinator, user_coordinator, entry,
+            unique_id_suffix="filtration_next_start",
+        )
+
+    @property
+    def native_value(self) -> datetime | None:
+        if self.coordinator.data is None:
+            return None
+        schedule = self.coordinator.data.filter_schedule
+        if schedule is None:
+            return None
+        temperature = self._get_temperature()
+        if temperature is None:
+            return None
+        next_start, _ = schedule.next_filtration_events(temperature, dt_util.now())
+        return next_start
+
+
+class EasyCareFiltrationNextEndSensor(_FiltrationScheduleSensorBase):
+    """Prochain arrêt programmé de la filtration.
+
+    Si la pompe est actuellement en filtration, indique la fin de la plage courante.
+    Sinon, indique la fin de la prochaine plage programmée.
+    """
+
+    _attr_translation_key = "filtration_next_end"
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_icon = "mdi:timer-stop-outline"
+
+    def __init__(
+        self,
+        coordinator: EasyCareBPCCoordinator,
+        user_coordinator: EasyCareUserCoordinator,
+        entry: ConfigEntry,
+    ) -> None:
+        super().__init__(
+            coordinator, user_coordinator, entry,
+            unique_id_suffix="filtration_next_end",
+        )
+
+    @property
+    def native_value(self) -> datetime | None:
+        if self.coordinator.data is None:
+            return None
+        schedule = self.coordinator.data.filter_schedule
+        if schedule is None:
+            return None
+        temperature = self._get_temperature()
+        if temperature is None:
+            return None
+        _, next_end = schedule.next_filtration_events(temperature, dt_util.now())
+        return next_end
 
 
 def _derive_light_mode(program: dict | None) -> str | None:

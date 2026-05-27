@@ -109,7 +109,9 @@
       "escalight_mode": {"name": "Mode éclairage marches"},
       "owner": {"name": "Propriétaire du compte"},
       "detail": {"name": "Modèle de piscine"},
-      "filtration_daily_duration": {"name": "Durée de filtration (journalière)"}
+      "filtration_daily_duration": {"name": "Durée de filtration (journalière)"},
+      "filtration_next_start": {"name": "Prochain démarrage filtration"},
+      "filtration_next_end": {"name": "Prochain arrêt filtration"}
     }
   },
   "services": {

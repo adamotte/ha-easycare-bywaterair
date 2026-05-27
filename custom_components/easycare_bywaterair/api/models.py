@@ -8,7 +8,7 @@ un dict JSON brut. Les champs critiques manquants lèvent `EasyCareInvalidRespon
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from .exceptions import EasyCareInvalidResponseError
@@ -578,6 +578,66 @@ class FilterSchedule:
                 if best is None or rule.threshold_temp > (best.threshold_temp or 0):
                     best = rule
         return best
+
+    def next_filtration_events(
+        self, temperature: float, now: datetime
+    ) -> tuple[datetime | None, datetime | None]:
+        """Retourne (prochain_démarrage, prochain_arrêt) selon l'heure actuelle.
+
+        Sémantique :
+          - Si la pompe est actuellement dans une plage :
+              prochain_démarrage = début de la plage suivante (demain si dernière du jour)
+              prochain_arrêt     = fin de la plage courante
+          - Si la pompe n'est pas dans une plage :
+              prochain_démarrage = début de la prochaine plage (demain si toutes passées)
+              prochain_arrêt     = fin de cette prochaine plage
+
+        Args:
+            temperature: température de l'eau en °C.
+            now        : datetime courant (timezone-aware recommandé).
+
+        Returns:
+            Tuple (next_start, next_end). Les deux sont None si sched absent ou vide.
+        """
+        windows = self.filter_windows_from_sched(temperature)
+        if not windows:
+            return None, None
+
+        current_h = now.hour
+        today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        tomorrow = today + timedelta(days=1)
+
+        def _make_dt(base: datetime, h: int) -> datetime:
+            """Heure h dans la journée de base (h=24 → minuit du lendemain)."""
+            if h >= 24:
+                return base + timedelta(days=1)
+            return base.replace(hour=h)
+
+        # Cherche si on est dans une plage courante
+        current_idx: int | None = None
+        for i, (start_h, end_h) in enumerate(windows):
+            if start_h <= current_h < end_h:
+                current_idx = i
+                break
+
+        if current_idx is not None:
+            # On est dans une plage — arrêt = fin courante, démarrage = plage suivante
+            _, end_h = windows[current_idx]
+            next_stop = _make_dt(today, end_h)
+            if current_idx + 1 < len(windows):
+                next_start = _make_dt(today, windows[current_idx + 1][0])
+            else:
+                next_start = _make_dt(tomorrow, windows[0][0])
+            return next_start, next_stop
+
+        # On n'est pas dans une plage — cherche la prochaine
+        for start_h, end_h in windows:
+            if start_h > current_h:
+                return _make_dt(today, start_h), _make_dt(today, end_h)
+
+        # Toutes les plages du jour sont passées → première plage de demain
+        first_start, first_end = windows[0]
+        return _make_dt(tomorrow, first_start), _make_dt(tomorrow, first_end)
 
 
 @dataclass(frozen=True, slots=True)
