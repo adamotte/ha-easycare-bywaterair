@@ -336,7 +336,7 @@ class EasyCareClient:
         return True
 
     async def start_boost(self, boost_mode: str) -> bool:
-        """Démarre un boost de filtration.
+        """Démarre un boost de filtration via l'endpoint programmes BPC.
 
         Args:
             boost_mode: BOOST4H, BOOST12H, BOOST24H, BOOST36H, BOOST48H ou BOOST72H.
@@ -344,25 +344,66 @@ class EasyCareClient:
         boost_upper = boost_mode.upper().strip()
         if boost_upper not in BOOST_MODES:
             raise ValueError(f"Mode boost invalide : {boost_mode!r}")
-        _LOGGER.debug("Démarrage boost %s", boost_upper)
-        payload: dict[str, Any] = {
-            "id": self._bpc_module_id,
-            "command": {"mode": boost_upper},
-            "wakeUp": False,
+        _boost_durations: dict[str, int] = {
+            "BOOST4H": 240, "BOOST12H": 720, "BOOST24H": 1440,
+            "BOOST36H": 2160, "BOOST48H": 2880, "BOOST72H": 4320,
         }
-        await self._request("POST", API_HOST_EASYCARE, API_PATH_SET_STATUS_COMMAND, json_payload=payload)
+        duration_minutes = _boost_durations[boost_upper]
+        _LOGGER.debug("Démarrage boost %s (%d min)", boost_upper, duration_minutes)
+        await self._update_boost_via_programs(state="boost", remaining_minutes=duration_minutes)
         return True
 
     async def cancel_boost(self) -> bool:
-        """Annule le boost de filtration en cours."""
+        """Annule le boost de filtration en cours via l'endpoint programmes BPC."""
         _LOGGER.debug("Annulation boost en cours")
-        payload: dict[str, Any] = {
-            "id": self._bpc_module_id,
-            "command": {"mode": BOOST_CANCEL},
-            "wakeUp": False,
-        }
-        await self._request("POST", API_HOST_EASYCARE, API_PATH_SET_STATUS_COMMAND, json_payload=payload)
+        await self._update_boost_via_programs(state="active", remaining_minutes=0)
         return True
+
+    async def _update_boost_via_programs(self, *, state: str, remaining_minutes: int) -> None:
+        """Modifie l'état boost du programme pompe (index 0) via GET + POST programmes BPC.
+
+        Les champs `state` et `remainingDuration` sont modifiés au niveau racine
+        de l'objet programme (pas dans programCharacteristics).
+
+        Args:
+            state             : "boost" pour démarrer, "active" pour annuler.
+            remaining_minutes : durée restante en minutes (0 pour annuler).
+        """
+        if self._watbox is None or self._bpc is None:
+            _LOGGER.warning("_update_boost_via_programs: modules non disponibles")
+            return
+        path = API_PATH_BPC_PROGRAMS.format(
+            watbox_serial=self._watbox.serial_number, bpc_name=self._bpc.short_name,
+        )
+        data = await self._request("GET", API_HOST_EASYCARE, path)
+        programs = data.get("programs")
+        if not programs:
+            _LOGGER.warning("_update_boost_via_programs: aucun programme reçu")
+            return
+        modified = False
+        for prog in programs:
+            if prog.get("index") == 0:
+                _LOGGER.debug(
+                    "Boost — programme pompe avant modification : state=%s remainingDuration=%s",
+                    prog.get("state"), prog.get("remainingDuration"),
+                )
+                prog["state"] = state
+                prog["remainingDuration"] = remaining_minutes
+                modified = True
+                break
+        if not modified:
+            _LOGGER.warning("_update_boost_via_programs: programme pompe (index 0) absent")
+            return
+        post_payload: dict[str, Any] = {
+            "programs": programs,
+            "module": self._bpc_module_id,
+            "programmationType": 1,
+        }
+        _LOGGER.debug(
+            "Boost POST — state=%s remainingDuration=%d module=%s",
+            state, remaining_minutes, self._bpc_module_id,
+        )
+        await self._request("POST", API_HOST_EASYCARE, path, json_payload=post_payload)
 
     async def set_filtration_mode_with_offset(self, mode_option: str) -> bool:
         """Change le mode de filtration avec gestion de l'offset AUTO.
@@ -415,14 +456,24 @@ class EasyCareClient:
             watbox_serial=self._watbox.serial_number, bpc_name=self._bpc.short_name,
         )
         data = await self._request("GET", API_HOST_EASYCARE, path)
+        _LOGGER.debug("_update_pump_program GET — clés réponse : %s", list(data.keys()))
         programs = data.get("programs")
         if not programs:
-            _LOGGER.warning("_update_pump_program: aucun programme reçu")
+            _LOGGER.warning("_update_pump_program: aucun programme reçu — réponse : %s", data)
             return
+        _LOGGER.debug(
+            "_update_pump_program: %d programme(s), indices=%s, bpc_module_id=%r",
+            len(programs), [p.get("index") for p in programs], self._bpc_module_id,
+        )
         modified = False
         for prog in programs:
             if prog.get("index") == 0:
                 charac = prog.get("programCharacteristics")
+                _LOGGER.debug(
+                    "_update_pump_program — programme pompe avant modif : "
+                    "state=%s remainingDuration=%s programCharacteristics=%s",
+                    prog.get("state"), prog.get("remainingDuration"), charac,
+                )
                 if isinstance(charac, dict):
                     if mode is not None:
                         prog_mode, prog_rule = _MODE_TO_PROG[mode]
@@ -432,17 +483,29 @@ class EasyCareClient:
                     if adapt_offset is not None:
                         charac["adaptOffset"] = adapt_offset
                     modified = True
+                else:
+                    _LOGGER.warning(
+                        "_update_pump_program: programCharacteristics absent ou non-dict : %r", charac
+                    )
                 break
         if not modified:
-            _LOGGER.warning("_update_pump_program: programme pompe (index 0) absent")
+            _LOGGER.warning(
+                "_update_pump_program: programme pompe (index 0) absent parmi %s",
+                [p.get("index") for p in programs],
+            )
             return
-        _LOGGER.debug("_update_pump_program: mode=%s adaptOffset=%s", mode, adapt_offset)
         post_payload: dict[str, Any] = {
             "programs": programs,
             "module": self._bpc_module_id,
             "programmationType": 1,
         }
+        _LOGGER.debug(
+            "_update_pump_program POST — mode=%s adaptOffset=%s module=%r payload=%s",
+            mode, adapt_offset, self._bpc_module_id,
+            [{k: v for k, v in p.items() if k in ("index", "state", "programCharacteristics")} for p in programs],
+        )
         await self._request("POST", API_HOST_EASYCARE, path, json_payload=post_payload)
+        _LOGGER.debug("_update_pump_program POST envoyé avec succès")
 
     async def _request(
         self,
