@@ -213,7 +213,9 @@ class EasyCareClient:
         data = await self._request("GET", API_HOST_EASYCARE, path)
         return PoolStatus.from_api(data)
 
-    async def get_bpc_programs_data(self) -> tuple[str | None, int, dict | None, dict | None]:
+    async def get_bpc_programs_data(
+        self,
+    ) -> tuple[str | None, int, dict | None, dict | None]:
         """Lit les programmes BPC pour la pompe et les lumières.
 
         Pompe (index 0) — mode de filtration et adaptOffset :
@@ -246,19 +248,26 @@ class EasyCareClient:
             if idx == 0:
                 prog_mode = int(charac.get("mode", 0) or 0)
                 prog_rule = int(charac.get("rule", 0) or 0)
-                # adaptOffset est au niveau racine du programme (comme state/remainingDuration),
-                # pas dans programCharacteristics. On tente les deux pour la robustesse.
+                # adaptOffset : cherché dans sched, puis racine, puis programCharacteristics.
+                sched_val = prog.get("sched")
+                sched_offset = None
+                if isinstance(sched_val, dict):
+                    sched_offset = sched_val.get("adaptOffset")
+                elif isinstance(sched_val, list) and sched_val:
+                    sched_offset = sched_val[0].get("adaptOffset")
                 adapt_offset = int(
-                    prog.get("adaptOffset")
+                    sched_offset
+                    or prog.get("adaptOffset")
                     or charac.get("adaptOffset", 0)
                     or 0
                 )
                 _LOGGER.debug(
                     "BPC programmes — pompe (index 0) : clés_root=%s mode=%s rule=%s "
-                    "adaptOffset_root=%s adaptOffset_charac=%s → adapt_offset=%d",
+                    "sched=%s adaptOffset_sched=%s adaptOffset_root=%s adaptOffset_charac=%s → adapt_offset=%d",
                     list(prog.keys()),
                     prog_mode, prog_rule,
-                    prog.get("adaptOffset"), charac.get("adaptOffset"),
+                    sched_val,
+                    sched_offset, prog.get("adaptOffset"), charac.get("adaptOffset"),
                     adapt_offset,
                 )
                 if prog_mode == 0:
@@ -483,13 +492,13 @@ class EasyCareClient:
         for prog in programs:
             if prog.get("index") == 0:
                 charac = prog.get("programCharacteristics")
+                sched = prog.get("sched")
                 _LOGGER.debug(
                     "_update_pump_program — programme pompe avant modif : "
-                    "clés_root=%s state=%s remainingDuration=%s "
-                    "adaptOffset_root=%s programCharacteristics=%s",
+                    "clés_root=%s adaptOffset_root=%s sched=%s programCharacteristics=%s",
                     list(prog.keys()),
-                    prog.get("state"), prog.get("remainingDuration"),
                     prog.get("adaptOffset"),
+                    sched,
                     charac,
                 )
                 if isinstance(charac, dict):
@@ -499,12 +508,21 @@ class EasyCareClient:
                         if prog_rule is not None:
                             charac["rule"] = prog_rule
                     if adapt_offset is not None:
-                        # adaptOffset est au niveau RACINE du programme (comme state/remainingDuration),
-                        # pas dans programCharacteristics — confirmé en live : injecter dans charac
-                        # retourne HTTP 200 mais le serveur ignore silencieusement le champ.
-                        prog["adaptOffset"] = adapt_offset
-                        # Nettoyer si présent par erreur dans programCharacteristics
+                        # Tentative : adaptOffset dans sched (nouveau candidat après échec de
+                        # programCharacteristics et de la racine — clés_root révèle 'sched').
+                        # On nettoie les emplacements précédemment essayés.
+                        prog.pop("adaptOffset", None)
                         charac.pop("adaptOffset", None)
+                        if isinstance(sched, dict):
+                            sched["adaptOffset"] = adapt_offset
+                            _LOGGER.debug("adaptOffset=%d injecté dans sched", adapt_offset)
+                        elif isinstance(sched, list) and sched:
+                            sched[0]["adaptOffset"] = adapt_offset
+                            _LOGGER.debug("adaptOffset=%d injecté dans sched[0]", adapt_offset)
+                        else:
+                            # Fallback : créer sched comme dict si absent
+                            prog["sched"] = {"adaptOffset": adapt_offset}
+                            _LOGGER.debug("adaptOffset=%d injecté dans sched créé", adapt_offset)
                     modified = True
                 else:
                     _LOGGER.warning(
