@@ -60,11 +60,11 @@
       "filtration_mode": {
         "name": "Filtration mode",
         "state": {
-          "AUTO-2H": "Auto -2h (temperature)",
-          "AUTO": "Auto (temperature)",
-          "AUTO+2H": "Auto +2h (temperature)",
-          "CONTINUOUS": "On (continuous)",
-          "MANUAL": "Off (manual)"
+          "AUTO-2H": "Auto -2h",
+          "AUTO": "Auto",
+          "AUTO+2H": "Auto +2h",
+          "CONTINUOUS": "On",
+          "MANUAL": "Off"
         }
       }
     },
@@ -80,7 +80,17 @@
         "name": "Pump state",
         "state": {"on": "On", "off": "Off"}
       },
-      "filtration_mode": {"name": "Filtration mode"},
+      "filtration_mode": {
+        "name": "Filtration mode",
+        "state": {
+          "AUTO-2H": "Auto -2h",
+          "AUTO": "Auto",
+          "AUTO+2H": "Auto +2h",
+          "ON": "On",
+          "OFF": "Off",
+          "PROG": "Prog"
+        }
+      },
       "pump_total_runtime": {"name": "Pump total runtime"},
       "pump_counter_date": {"name": "Counter reference date"},
       "boost_remaining": {"name": "Boost remaining"},
