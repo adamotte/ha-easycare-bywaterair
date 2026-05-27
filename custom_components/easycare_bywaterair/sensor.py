@@ -437,16 +437,25 @@ class EasyCareBoostRemainingSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], Se
     def native_value(self) -> str | None:
         if self.coordinator.data is None:
             return None
-        if self.coordinator.data.pool_status is None:
-            pump = self.coordinator.data.get_input(BPC_INDEX_PUMP)
-            return pump.remaining_time if pump else None
-        return self.coordinator.data.pool_status.boost_remaining_time
+        # Source primaire : BPCInput (endpoint status BPC), seul à jour pour le boost programme
+        pump = self.coordinator.data.get_input(BPC_INDEX_PUMP)
+        if pump is not None and pump.is_boosting:
+            return pump.remaining_time
+        # Repli : pool_status (ne reflète pas les boosts programme, mais vaut mieux que rien)
+        if self.coordinator.data.pool_status is not None:
+            return self.coordinator.data.pool_status.boost_remaining_time
+        return "00:00"
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        if self.coordinator.data is None or self.coordinator.data.pool_status is None:
-            return {}
-        return {"boost_active": self.coordinator.data.pool_status.is_boosting}
+        if self.coordinator.data is None:
+            return {"boost_active": False}
+        pump = self.coordinator.data.get_input(BPC_INDEX_PUMP)
+        if pump is not None:
+            return {"boost_active": pump.is_boosting}
+        if self.coordinator.data.pool_status is not None:
+            return {"boost_active": self.coordinator.data.pool_status.is_boosting}
+        return {"boost_active": False}
 
 
 class EasyCarePressureSensor(EasyCarePressureEntity[EasyCareUserCoordinator], SensorEntity):
