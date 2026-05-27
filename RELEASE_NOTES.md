@@ -1,5 +1,5 @@
-**Correction critique : l'intégration ne se chargeait pas (NameError à l'import)**
+**Correction critique : l'intégration ne se chargeait pas (ImportError sur select.py)**
 
-Une constante `BOOST_MODE_*` était référencée avant sa définition dans `const.py`, ce qui provoquait une erreur à l'import et empêchait l'intégration de se charger complètement.
+Un import incorrect (`HAHA_BOOST_ACTIVE` / `HAHA_BOOST_OFF` au lieu de `HA_BOOST_ACTIVE` / `HA_BOOST_OFF`) dans `select.py` empêchait le chargement de la plateforme select et bloquait le démarrage de l'intégration.
 
-Mise à jour depuis v1.0.1 recommandée pour tous les utilisateurs.
+Mise à jour depuis v1.0.2 recommandée pour tous les utilisateurs.
