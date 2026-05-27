@@ -20,6 +20,9 @@ from ..const import (
     ADAPT_OFFSET_MINUS,
     ADAPT_OFFSET_NEUTRAL,
     ADAPT_OFFSET_PLUS,
+    SCHED_AUTO_ROW_MINUS,
+    SCHED_AUTO_ROW_STD,
+    SCHED_AUTO_ROW_PLUS,
     API_HOST_EASYCARE,
     API_PATH_BPC_MANUAL,
     API_PATH_BPC_PROGRAMS,
@@ -252,32 +255,21 @@ class EasyCareClient:
                 _LOGGER.debug(
                     "BPC programmes — pompe (index 0) programme brut : %s", prog
                 )
-                # adaptOffset : cherché dans sched, puis racine, puis programCharacteristics.
+                # L'offset AUTO est encodé dans sched (masques de bits 24h par seuil de temp).
+                # On identifie l'offset en comparant sched[0] aux tables de référence.
                 sched_val = prog.get("sched")
-                sched_offset = None
-                if isinstance(sched_val, dict):
-                    sched_offset = sched_val.get("adaptOffset")
-                elif isinstance(sched_val, list) and sched_val:
+                adapt_offset = ADAPT_OFFSET_NEUTRAL
+                if isinstance(sched_val, list) and sched_val:
                     first = sched_val[0]
-                    if isinstance(first, dict):
-                        sched_offset = first.get("adaptOffset")
-                    else:
-                        _LOGGER.debug(
-                            "BPC programmes — sched[0] non-dict (type=%s) : %s",
-                            type(first).__name__, first,
-                        )
-                adapt_offset = int(
-                    sched_offset
-                    or prog.get("adaptOffset")
-                    or charac.get("adaptOffset", 0)
-                    or 0
-                )
+                    if isinstance(first, list):
+                        if first == list(SCHED_AUTO_ROW_MINUS):
+                            adapt_offset = ADAPT_OFFSET_MINUS
+                        elif first == list(SCHED_AUTO_ROW_PLUS):
+                            adapt_offset = ADAPT_OFFSET_PLUS
+                        # else : standard ou inconnu → ADAPT_OFFSET_NEUTRAL
                 _LOGGER.debug(
-                    "BPC programmes — pompe (index 0) : mode=%s rule=%s "
-                    "adaptOffset_sched=%s adaptOffset_root=%s adaptOffset_charac=%s → adapt_offset=%d",
-                    prog_mode, prog_rule,
-                    sched_offset, prog.get("adaptOffset"), charac.get("adaptOffset"),
-                    adapt_offset,
+                    "BPC programmes — pompe (index 0) : mode=%s rule=%s → adapt_offset=%d",
+                    prog_mode, prog_rule, adapt_offset,
                 )
                 if prog_mode == 0:
                     filtration_mode = "MANUAL"
@@ -517,32 +509,18 @@ class EasyCareClient:
                         if prog_rule is not None:
                             charac["rule"] = prog_rule
                     if adapt_offset is not None:
-                        # Tentative : adaptOffset dans sched (nouveau candidat après échec de
-                        # programCharacteristics et de la racine — clés_root révèle 'sched').
-                        # On nettoie les emplacements précédemment essayés.
-                        prog.pop("adaptOffset", None)
-                        charac.pop("adaptOffset", None)
-                        if isinstance(sched, dict):
-                            sched["adaptOffset"] = adapt_offset
-                            _LOGGER.debug("adaptOffset=%d injecté dans sched", adapt_offset)
-                        elif isinstance(sched, list) and sched:
-                            first_sched = sched[0]
-                            if isinstance(first_sched, dict):
-                                first_sched["adaptOffset"] = adapt_offset
-                                _LOGGER.debug("adaptOffset=%d injecté dans sched[0]", adapt_offset)
-                            else:
-                                # sched[0] n'est pas un dict (type=%s) — structure inconnue.
-                                # L'offset n'est pas injecté ; le log "programme brut" permettra
-                                # d'identifier le bon emplacement.
-                                _LOGGER.warning(
-                                    "adaptOffset=%d non injecté : sched[0] est de type %s "
-                                    "(attendu dict) — sched=%s",
-                                    adapt_offset, type(first_sched).__name__, sched,
-                                )
+                        # L'offset AUTO est encodé dans la matrice sched (masques 24 bits).
+                        # On remplace sched entier par la table de référence correspondante.
+                        if adapt_offset == ADAPT_OFFSET_MINUS:
+                            prog["sched"] = [list(SCHED_AUTO_ROW_MINUS)] * 7
+                            label = "AUTO-2H"
+                        elif adapt_offset == ADAPT_OFFSET_PLUS:
+                            prog["sched"] = [list(SCHED_AUTO_ROW_PLUS)] * 7
+                            label = "AUTO+2H"
                         else:
-                            # Fallback : créer sched comme dict si absent
-                            prog["sched"] = {"adaptOffset": adapt_offset}
-                            _LOGGER.debug("adaptOffset=%d injecté dans sched créé", adapt_offset)
+                            prog["sched"] = [list(SCHED_AUTO_ROW_STD)] * 7
+                            label = "AUTO-Standard"
+                        _LOGGER.debug("adaptOffset=%d → sched remplacé par table %s", adapt_offset, label)
                     modified = True
                 else:
                     _LOGGER.warning(
