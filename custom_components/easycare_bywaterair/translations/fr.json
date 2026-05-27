@@ -108,7 +108,8 @@
       "spot_mode": {"name": "Mode projecteur"},
       "escalight_mode": {"name": "Mode éclairage marches"},
       "owner": {"name": "Propriétaire du compte"},
-      "detail": {"name": "Modèle de piscine"}
+      "detail": {"name": "Modèle de piscine"},
+      "filtration_daily_duration": {"name": "Durée de filtration (journalière)"}
     }
   },
   "services": {

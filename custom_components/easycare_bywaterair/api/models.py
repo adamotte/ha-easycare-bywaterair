@@ -428,6 +428,70 @@ class BPCInput:
 
 
 @dataclass(frozen=True, slots=True)
+class CyclicRule:
+    """Une règle cyclic de filtration pour un seuil de température.
+
+    threshold_index : index dans le tableau `ths` du programCharacteristics.
+    threshold_temp  : température seuil en °C (ths[threshold_index]), None si hors limites.
+    duration_min    : durée de filtration par cycle (minutes).
+    period_min      : période entre le début de deux cycles (minutes).
+    """
+
+    threshold_index: int
+    threshold_temp: int | None
+    duration_min: int
+    period_min: int
+
+    @property
+    def daily_hours(self) -> float:
+        """Durée de filtration journalière en heures."""
+        if self.period_min <= 0:
+            return 0.0
+        return round((self.duration_min / self.period_min) * 24, 2)
+
+
+@dataclass(frozen=True, slots=True)
+class FilterSchedule:
+    """Programme de filtration cyclique de la pompe (programme index=0).
+
+    rules      : règles cyclic triées telles que retournées par l'API.
+    thresholds : tableau brut `ths` (seuils de température en °C).
+    """
+
+    rules: tuple[CyclicRule, ...]
+    thresholds: tuple[int, ...]
+
+    @classmethod
+    def from_program_characteristics(cls, charac: dict[str, Any]) -> FilterSchedule:
+        """Parse le bloc programCharacteristics du programme pompe (index=0)."""
+        ths = tuple(int(t) for t in (charac.get("ths") or []))
+        rules: list[CyclicRule] = []
+        for entry in (charac.get("cyclic") or []):
+            th_idx = int(entry.get("th", 0))
+            temp = ths[th_idx] if th_idx < len(ths) else None
+            rules.append(CyclicRule(
+                threshold_index=th_idx,
+                threshold_temp=temp,
+                duration_min=int(entry.get("dur", 0)),
+                period_min=int(entry.get("per", 1)),
+            ))
+        return cls(rules=tuple(rules), thresholds=ths)
+
+    def active_rule_for_temp(self, temperature: float) -> CyclicRule | None:
+        """Retourne la règle active pour une température donnée.
+
+        Cherche la règle dont le seuil est le plus élevé parmi ceux
+        inférieurs ou égaux à `temperature` (logique de palier).
+        """
+        best: CyclicRule | None = None
+        for rule in self.rules:
+            if rule.threshold_temp is not None and rule.threshold_temp <= temperature:
+                if best is None or rule.threshold_temp > (best.threshold_temp or 0):
+                    best = rule
+        return best
+
+
+@dataclass(frozen=True, slots=True)
 class PoolStatus:
     """État de filtration de la piscine."""
 

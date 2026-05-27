@@ -106,6 +106,7 @@ async def async_setup_entry(
             EasyCarePumpTotalRuntimeSensor(coords.bpc, entry),
             EasyCarePumpCounterDateSensor(coords.bpc, entry),
             EasyCareBoostRemainingSensor(coords.bpc, entry),
+            EasyCareFiltrationDurationSensor(coords.bpc, coords.user, entry),
         ])
         n = bpc.number_of_inputs
         if n >= 1:
@@ -560,6 +561,74 @@ class EasyCareDetailSensor(EasyCareWATBOXEntity[EasyCareUserCoordinator], Sensor
             "longitude": p.longitude,
             "custom_photo": p.custom_photo or None,
             "last_update": last_fetched.isoformat() if last_fetched else None,
+        }
+
+
+class EasyCareFiltrationDurationSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], SensorEntity):
+    """Durée de filtration journalière calculée depuis le programme cyclic actif.
+
+    La règle active est celle dont le seuil de température est le plus élevé
+    parmi ceux inférieurs ou égaux à la température actuelle de l'eau.
+    La température est lue en snapshot depuis EasyCareUserCoordinator.
+    Retourne None (unavailable) si la température n'est pas disponible.
+    """
+
+    _attr_translation_key = "filtration_daily_duration"
+    _attr_device_class = SensorDeviceClass.DURATION
+    _attr_native_unit_of_measurement = UnitOfTime.HOURS
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_suggested_display_precision = 1
+    _attr_icon = "mdi:timer-sand"
+
+    def __init__(
+        self,
+        coordinator: EasyCareBPCCoordinator,
+        user_coordinator: EasyCareUserCoordinator,
+        entry: ConfigEntry,
+    ) -> None:
+        super().__init__(coordinator, entry, unique_id_suffix="filtration_daily_duration")
+        self._user_coordinator = user_coordinator
+
+    @property
+    def native_value(self) -> float | None:
+        if self.coordinator.data is None:
+            return None
+        schedule = self.coordinator.data.filter_schedule
+        if schedule is None:
+            return None
+        # Lecture snapshot — pas d'abonnement aux updates du coordinateur user
+        temperature: float | None = None
+        if self._user_coordinator.data is not None:
+            temperature = self._user_coordinator.data.metrics.temperature_value
+        if temperature is None:
+            return None
+        rule = schedule.active_rule_for_temp(temperature)
+        return rule.daily_hours if rule is not None else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        if self.coordinator.data is None:
+            return {}
+        schedule = self.coordinator.data.filter_schedule
+        if schedule is None:
+            return {}
+        temperature: float | None = None
+        if self._user_coordinator.data is not None:
+            temperature = self._user_coordinator.data.metrics.temperature_value
+        rule = schedule.active_rule_for_temp(temperature) if temperature is not None else None
+        return {
+            "thresholds_c": list(schedule.thresholds),
+            "cyclic_rules": [
+                {
+                    "threshold_index": r.threshold_index,
+                    "threshold_temp_c": r.threshold_temp,
+                    "duration_min": r.duration_min,
+                    "period_min": r.period_min,
+                    "daily_hours": r.daily_hours,
+                }
+                for r in schedule.rules
+            ],
+            "active_threshold_temp_c": rule.threshold_temp if rule is not None else None,
         }
 
 
