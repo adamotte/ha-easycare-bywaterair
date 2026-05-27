@@ -43,17 +43,21 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     PERCENTAGE,
     EntityCategory,
+    UnitOfEnergy,
+    UnitOfPower,
     UnitOfPressure,
     UnitOfTemperature,
     UnitOfTime,
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.util import dt as dt_util
 
 from .const import (
     ADAPT_OFFSET_MINUS,
     ADAPT_OFFSET_PLUS,
     BPC_INDEX_PUMP,
+    CONF_PUMP_POWER_W,
     DOMAIN,
     MODE_AUTO,
     MODE_AUTO_MINUS,
@@ -106,7 +110,16 @@ async def async_setup_entry(
             EasyCarePumpTotalRuntimeSensor(coords.bpc, entry),
             EasyCarePumpCounterDateSensor(coords.bpc, entry),
             EasyCareBoostRemainingSensor(coords.bpc, entry),
+            EasyCareFiltrationDurationSensor(coords.bpc, coords.user, entry),
+            EasyCareFiltrationNextStartSensor(coords.bpc, coords.user, entry),
+            EasyCareFiltrationNextEndSensor(coords.bpc, coords.user, entry),
         ])
+        pump_power_w: int = entry.options.get(CONF_PUMP_POWER_W, 0)
+        if pump_power_w > 0:
+            sensors.extend([
+                EasyCarePumpPowerSensor(coords.bpc, entry, pump_power_w),
+                EasyCarePumpEnergySensor(coords.bpc, entry, pump_power_w),
+            ])
         n = bpc.number_of_inputs
         if n >= 1:
             sensors.append(EasyCareSpotModeSensor(coords.bpc, entry))
@@ -405,6 +418,63 @@ class EasyCarePumpTotalRuntimeSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], 
         return {"counter_reset_date": reset.date().isoformat() if reset else None}
 
 
+class EasyCarePumpPowerSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], SensorEntity):
+    """Puissance instantanée de la pompe (W nominaux configurés, 0 si arrêtée)."""
+
+    _attr_translation_key = "pump_power"
+    _attr_device_class = SensorDeviceClass.POWER
+    _attr_native_unit_of_measurement = UnitOfPower.WATT
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_suggested_display_precision = 0
+
+    def __init__(self, coordinator: EasyCareBPCCoordinator, entry: ConfigEntry, power_w: int) -> None:
+        super().__init__(coordinator, entry, unique_id_suffix="pump_power")
+        self._power_w = power_w
+
+    @property
+    def native_value(self) -> int | None:
+        if self.coordinator.data is None:
+            return None
+        pump = self.coordinator.data.get_input(BPC_INDEX_PUMP)
+        if pump is None:
+            return None
+        return self._power_w if pump.is_on else 0
+
+
+class EasyCarePumpEnergySensor(EasyCareBPCEntity[EasyCareBPCCoordinator], SensorEntity):
+    """Énergie cumulée de la pompe depuis la date de remise à zéro du compteur.
+
+    Calculée à partir du temps total d'activation (minutes) et de la puissance
+    nominale configurée. Compatible avec le dashboard énergie de HA.
+    """
+
+    _attr_translation_key = "pump_energy"
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_suggested_display_precision = 3
+
+    def __init__(self, coordinator: EasyCareBPCCoordinator, entry: ConfigEntry, power_w: int) -> None:
+        super().__init__(coordinator, entry, unique_id_suffix="pump_energy")
+        self._power_w = power_w
+
+    @property
+    def native_value(self) -> float | None:
+        if self.coordinator.data is None:
+            return None
+        minutes = self.coordinator.data.pump_total_activation_minutes
+        if minutes is None:
+            return None
+        return round(minutes / 60 * self._power_w / 1000, 3)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        if self.coordinator.data is None:
+            return {}
+        reset = self.coordinator.data.pump_activation_reset_date
+        return {"counter_reset_date": reset.date().isoformat() if reset else None}
+
+
 class EasyCarePumpCounterDateSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], SensorEntity):
     """Date de remise à zéro du compteur de la pompe."""
 
@@ -561,6 +631,179 @@ class EasyCareDetailSensor(EasyCareWATBOXEntity[EasyCareUserCoordinator], Sensor
             "custom_photo": p.custom_photo or None,
             "last_update": last_fetched.isoformat() if last_fetched else None,
         }
+
+
+class EasyCareFiltrationDurationSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], SensorEntity):
+    """Durée de filtration journalière depuis les masques horaires BPC (sched).
+
+    Calcul par popcount du masque 24 bits actif pour la température courante.
+    Fallback sur le ratio dur/per (cyclic) si sched est absent.
+    La température est lue en snapshot depuis EasyCareUserCoordinator.
+    Retourne None (unavailable) si la température n'est pas disponible.
+    """
+
+    _attr_translation_key = "filtration_daily_duration"
+    _attr_device_class = SensorDeviceClass.DURATION
+    _attr_native_unit_of_measurement = UnitOfTime.HOURS
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_suggested_display_precision = 1
+    _attr_icon = "mdi:timer-sand"
+
+    def __init__(
+        self,
+        coordinator: EasyCareBPCCoordinator,
+        user_coordinator: EasyCareUserCoordinator,
+        entry: ConfigEntry,
+    ) -> None:
+        super().__init__(coordinator, entry, unique_id_suffix="filtration_daily_duration")
+        self._user_coordinator = user_coordinator
+
+    def _get_temperature(self) -> float | None:
+        """Lecture snapshot de la température AC1 (pas d'abonnement au coordinateur user)."""
+        if self._user_coordinator.data is None:
+            return None
+        return self._user_coordinator.data.metrics.temperature_value
+
+    @property
+    def native_value(self) -> float | None:
+        if self.coordinator.data is None:
+            return None
+        schedule = self.coordinator.data.filter_schedule
+        if schedule is None:
+            return None
+        temperature = self._get_temperature()
+        if temperature is None:
+            return None
+        # Source primaire : masque sched (popcount) — précis à l'heure près
+        hours = schedule.daily_hours_from_sched(temperature)
+        if hours is not None:
+            return hours
+        # Fallback : ratio dur/per depuis les règles cyclic
+        rule = schedule.active_rule_for_temp(temperature)
+        return rule.daily_hours if rule is not None else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        if self.coordinator.data is None:
+            return {}
+        schedule = self.coordinator.data.filter_schedule
+        if schedule is None:
+            return {}
+        temperature = self._get_temperature()
+
+        attrs: dict[str, Any] = {"thresholds_c": list(schedule.thresholds)}
+
+        if temperature is not None:
+            idx = schedule.active_threshold_index_for_temp(temperature)
+            attrs["active_threshold_temp_c"] = (
+                schedule.thresholds[idx] if idx is not None else None
+            )
+            windows = schedule.filter_windows_from_sched(temperature)
+            if windows is not None:
+                attrs["filter_windows"] = [
+                    {"start_h": s, "end_h": e} for s, e in windows
+                ]
+        else:
+            attrs["active_threshold_temp_c"] = None
+
+        return attrs
+
+
+class _FiltrationScheduleSensorBase(EasyCareBPCEntity[EasyCareBPCCoordinator], SensorEntity):
+    """Classe de base pour les sensors de planning de filtration.
+
+    Partage la logique d'accès au FilterSchedule et à la température.
+    """
+
+    def __init__(
+        self,
+        coordinator: EasyCareBPCCoordinator,
+        user_coordinator: EasyCareUserCoordinator,
+        entry: ConfigEntry,
+        *,
+        unique_id_suffix: str,
+    ) -> None:
+        super().__init__(coordinator, entry, unique_id_suffix=unique_id_suffix)
+        self._user_coordinator = user_coordinator
+
+    def _get_temperature(self) -> float | None:
+        """Lecture snapshot de la température AC1."""
+        if self._user_coordinator.data is None:
+            return None
+        return self._user_coordinator.data.metrics.temperature_value
+
+
+class EasyCareFiltrationNextStartSensor(_FiltrationScheduleSensorBase):
+    """Prochain démarrage programmé de la filtration.
+
+    Si la pompe est actuellement en filtration, indique le démarrage de la
+    prochaine plage (après la plage courante).
+    Si la pompe n'est pas en filtration, indique le démarrage de la prochaine plage.
+    """
+
+    _attr_translation_key = "filtration_next_start"
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_icon = "mdi:timer-play-outline"
+
+    def __init__(
+        self,
+        coordinator: EasyCareBPCCoordinator,
+        user_coordinator: EasyCareUserCoordinator,
+        entry: ConfigEntry,
+    ) -> None:
+        super().__init__(
+            coordinator, user_coordinator, entry,
+            unique_id_suffix="filtration_next_start",
+        )
+
+    @property
+    def native_value(self) -> datetime | None:
+        if self.coordinator.data is None:
+            return None
+        schedule = self.coordinator.data.filter_schedule
+        if schedule is None:
+            return None
+        temperature = self._get_temperature()
+        if temperature is None:
+            return None
+        next_start, _ = schedule.next_filtration_events(temperature, dt_util.now())
+        return next_start
+
+
+class EasyCareFiltrationNextEndSensor(_FiltrationScheduleSensorBase):
+    """Prochain arrêt programmé de la filtration.
+
+    Si la pompe est actuellement en filtration, indique la fin de la plage courante.
+    Sinon, indique la fin de la prochaine plage programmée.
+    """
+
+    _attr_translation_key = "filtration_next_end"
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_icon = "mdi:timer-stop-outline"
+
+    def __init__(
+        self,
+        coordinator: EasyCareBPCCoordinator,
+        user_coordinator: EasyCareUserCoordinator,
+        entry: ConfigEntry,
+    ) -> None:
+        super().__init__(
+            coordinator, user_coordinator, entry,
+            unique_id_suffix="filtration_next_end",
+        )
+
+    @property
+    def native_value(self) -> datetime | None:
+        if self.coordinator.data is None:
+            return None
+        schedule = self.coordinator.data.filter_schedule
+        if schedule is None:
+            return None
+        temperature = self._get_temperature()
+        if temperature is None:
+            return None
+        _, next_end = schedule.next_filtration_events(temperature, dt_util.now())
+        return next_end
 
 
 def _derive_light_mode(program: dict | None) -> str | None:

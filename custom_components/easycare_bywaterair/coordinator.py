@@ -32,6 +32,7 @@ from .api.models import (
     Alerts,
     BPCInput,
     Client,
+    FilterSchedule,
     Metrics,
     Module,
     Pool,
@@ -73,6 +74,7 @@ class BPCData:
     escalight_program            : programCharacteristics brut de l'escalight (index 2), None si absent.
     pump_total_activation_minutes: durée cumulée de la pompe en minutes (depuis reset_date).
     pump_activation_reset_date   : date de remise à zéro du compteur pompe.
+    filter_schedule              : planning cyclic de filtration (programme pompe index=0).
     """
 
     inputs: tuple[BPCInput, ...]
@@ -83,6 +85,7 @@ class BPCData:
     escalight_program: dict | None = None
     pump_total_activation_minutes: int | None = None
     pump_activation_reset_date: datetime | None = None
+    filter_schedule: FilterSchedule | None = None
 
     def get_input(self, index: int) -> BPCInput | None:
         """Retourne la voie BPC d'index donné, ou None si absente."""
@@ -291,8 +294,9 @@ class EasyCareBPCCoordinator(DataUpdateCoordinator[BPCData]):
         adapt_offset = 0
         spot_program: dict | None = None
         escalight_program: dict | None = None
+        filter_schedule: FilterSchedule | None = None
         try:
-            filtration_mode, adapt_offset, spot_program, escalight_program = (
+            filtration_mode, adapt_offset, spot_program, escalight_program, filter_schedule = (
                 await self._client.get_bpc_programs_data()
             )
         except Exception as err:  # noqa: BLE001
@@ -311,6 +315,7 @@ class EasyCareBPCCoordinator(DataUpdateCoordinator[BPCData]):
             escalight_program=escalight_program,
             pump_total_activation_minutes=pump_total_minutes,
             pump_activation_reset_date=pump_reset_date,
+            filter_schedule=filter_schedule,
         )
 
     def _should_skip_cycle(self) -> bool:

@@ -16,6 +16,7 @@ CONF_BEARER: Final = "bearer"
 CONF_BEARER_EXPIRES_AT: Final = "bearer_expires_at"
 CONF_POOL_ID: Final = "pool_id"
 CONF_AUTH_CODE: Final = "auth_code"
+CONF_PUMP_POWER_W: Final = "pump_power_w"
 
 API_HOST_EASYCARE: Final = "https://easycare.waterair.com"
 API_PATH_TOKEN_FROM_B2C: Final = "/oauth2/tokenFromAzureADB2CIdToken"

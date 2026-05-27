@@ -22,7 +22,9 @@ Home Assistant integration for pools equipped with the
 - 📊 Filtration pressure (if LR-PR sensor is present)
 - 🔔 Notifications and active treatments
 - ⚙️ Current filtration mode and pump counters
+- ⚡ **Energy monitoring**: pump power (W) and cumulative energy (kWh) — compatible with the HA Energy Dashboard
 - 💡 **Light mode**: AUTO / MANUAL / OFF / PAUSE (with time slots and pause duration as attributes)
+- 🕐 **Filtration schedule** — daily duration, next start and next stop derived from the BPC programme (temperature-aware)
 
 ### Control
 - 💡 **Lights**: spotlight (spot) and step lighting (escalight) — MANUAL on (1h to 6h max)
@@ -60,6 +62,43 @@ directory of your HA installation, then restart.
 7. Paste it into HA and confirm
 
 The integration then handles automatic token renewal.
+
+## 🕐 Filtration schedule sensors
+
+Three sensors expose the BPC programme schedule, calculated in real time from the water temperature:
+
+| Sensor | Type | Description |
+|---|---|---|
+| `sensor.filtration_daily_duration` | Hours | Total filtration hours programmed for today |
+| `sensor.filtration_next_start` | Timestamp | Next scheduled pump start |
+| `sensor.filtration_next_end` | Timestamp | Next scheduled pump stop (end of current or next window) |
+
+The BPC programme stores a 24-bit bitmask per temperature threshold. The integration selects the highest threshold below the current water temperature and reads the corresponding schedule directly — no guesswork.
+
+**Semantics of `next_start` / `next_end`:**
+- **Pump currently running**: `next_end` = end of the current window, `next_start` = beginning of the next window (tomorrow's first window if none remain today)
+- **Pump currently stopped**: `next_start` / `next_end` = start and end of the next upcoming window (tomorrow's first window if all windows have passed)
+
+Multiple non-contiguous windows per day are supported (e.g. anti-freeze mode: 05h–07h and 22h–24h).
+
+The `filtration_daily_duration` sensor also exposes the following attributes:
+- `thresholds_c` — full list of configured temperature thresholds
+- `active_threshold_temp_c` — threshold currently active for the water temperature
+- `filter_windows` — list of `{start_h, end_h}` time windows
+
+## ⚡ Energy monitoring
+
+To track pump energy consumption in the [HA Energy Dashboard](https://www.home-assistant.io/docs/energy/):
+
+1. Go to **Settings → Devices & Services → easy·care by Waterair → Configure**
+2. Enter the **rated power of your pump in watts** (e.g. `150` for a P35)
+3. Confirm — the integration reloads and two new sensors appear on the BPC device:
+   - **Pump power** (`sensor.*_pump_power`) — instantaneous consumption in W (rated power when running, 0 when stopped)
+   - **Pump energy** (`sensor.*_pump_energy`) — cumulative energy in kWh since the last counter reset
+4. In **Settings → Energy → Individual devices → Add device**, select **Pump energy**
+
+> The energy sensor uses the cumulative runtime counter already provided by the BPC module.
+> Setting the power to `0` disables both sensors.
 
 ## 🎛️ Available services
 
@@ -106,6 +145,22 @@ automation:
       - service: notify.notify
         data:
           message: "Low chlorine: {{ states('sensor.easycare_bywaterair_chlorine') }} mV"
+
+# Notify when filtration is about to start (15 min before)
+  - alias: "Pool — Filtration starting soon"
+    trigger:
+      - platform: template
+        value_template: >
+          {{ (as_timestamp(states('sensor.easycare_bywaterair_filtration_next_start')) - as_timestamp(now())) < 900 }}
+    action:
+      - service: notify.notify
+        data:
+          message: >
+            Filtration starts at
+            {{ states('sensor.easycare_bywaterair_filtration_next_start') | as_timestamp | timestamp_custom('%H:%M') }},
+            ends at
+            {{ states('sensor.easycare_bywaterair_filtration_next_end') | as_timestamp | timestamp_custom('%H:%M') }}
+            ({{ state_attr('sensor.easycare_bywaterair_filtration_daily_duration', 'active_threshold_temp_c') }}°C threshold)
 ```
 
 ## ⚠️ Known limitations
