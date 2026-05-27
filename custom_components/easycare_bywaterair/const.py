@@ -100,6 +100,23 @@ ADAPT_OFFSET_MINUS: Final = -60
 ADAPT_OFFSET_NEUTRAL: Final = 0
 ADAPT_OFFSET_PLUS: Final = 60
 
+# Schedules AUTO — matrice de référence (7 jours × 12 seuils de température).
+# Chaque entier est un masque 24 bits : le bit N vaut 1 si la pompe filtre à l'heure N
+# (bit 0 = 0h, bit 23 = 23h). Capturés par reverse engineering de l'API Waterair.
+# Les 7 lignes (jours) sont identiques en mode AUTO — la matrice est uniforme.
+SCHED_AUTO_ROW_MINUS: Final[tuple[int, ...]] = (
+    32, 32, 3072, 7168, 15360, 64512, 261120,
+    1048064, 2097024, 8388544, 8388600, 16777212,
+)
+SCHED_AUTO_ROW_STD: Final[tuple[int, ...]] = (
+    4194336, 4194400, 15360, 31744, 64512, 261120, 523776,
+    2096896, 4194240, 16777184, 16777212, 16777215,
+)
+SCHED_AUTO_ROW_PLUS: Final[tuple[int, ...]] = (
+    12583008, 12583136, 64512, 130048, 261120, 523776, 1048320,
+    2097088, 8388576, 16777208, 16777215, 16777215,
+)
+
 BOOST_MODE_4H: Final = "BOOST4H"
 BOOST_MODE_12H: Final = "BOOST12H"
 BOOST_MODE_24H: Final = "BOOST24H"

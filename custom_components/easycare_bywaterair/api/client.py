@@ -20,6 +20,9 @@ from ..const import (
     ADAPT_OFFSET_MINUS,
     ADAPT_OFFSET_NEUTRAL,
     ADAPT_OFFSET_PLUS,
+    SCHED_AUTO_ROW_MINUS,
+    SCHED_AUTO_ROW_STD,
+    SCHED_AUTO_ROW_PLUS,
     API_HOST_EASYCARE,
     API_PATH_BPC_MANUAL,
     API_PATH_BPC_PROGRAMS,
@@ -213,7 +216,9 @@ class EasyCareClient:
         data = await self._request("GET", API_HOST_EASYCARE, path)
         return PoolStatus.from_api(data)
 
-    async def get_bpc_programs_data(self) -> tuple[str | None, int, dict | None, dict | None]:
+    async def get_bpc_programs_data(
+        self,
+    ) -> tuple[str | None, int, dict | None, dict | None]:
         """Lit les programmes BPC pour la pompe et les lumières.
 
         Pompe (index 0) — mode de filtration et adaptOffset :
@@ -246,7 +251,26 @@ class EasyCareClient:
             if idx == 0:
                 prog_mode = int(charac.get("mode", 0) or 0)
                 prog_rule = int(charac.get("rule", 0) or 0)
-                adapt_offset = int(charac.get("adaptOffset", 0) or 0)
+                # Log COMPLET avant tout parsing (crash-safe — s'affiche même si la suite plante).
+                _LOGGER.debug(
+                    "BPC programmes — pompe (index 0) programme brut : %s", prog
+                )
+                # L'offset AUTO est encodé dans sched (masques de bits 24h par seuil de temp).
+                # On identifie l'offset en comparant sched[0] aux tables de référence.
+                sched_val = prog.get("sched")
+                adapt_offset = ADAPT_OFFSET_NEUTRAL
+                if isinstance(sched_val, list) and sched_val:
+                    first = sched_val[0]
+                    if isinstance(first, list):
+                        if first == list(SCHED_AUTO_ROW_MINUS):
+                            adapt_offset = ADAPT_OFFSET_MINUS
+                        elif first == list(SCHED_AUTO_ROW_PLUS):
+                            adapt_offset = ADAPT_OFFSET_PLUS
+                        # else : standard ou inconnu → ADAPT_OFFSET_NEUTRAL
+                _LOGGER.debug(
+                    "BPC programmes — pompe (index 0) : mode=%s rule=%s → adapt_offset=%d",
+                    prog_mode, prog_rule, adapt_offset,
+                )
                 if prog_mode == 0:
                     filtration_mode = "MANUAL"
                 elif prog_mode == 1:
@@ -469,10 +493,14 @@ class EasyCareClient:
         for prog in programs:
             if prog.get("index") == 0:
                 charac = prog.get("programCharacteristics")
+                sched = prog.get("sched")
                 _LOGGER.debug(
                     "_update_pump_program — programme pompe avant modif : "
-                    "state=%s remainingDuration=%s programCharacteristics=%s",
-                    prog.get("state"), prog.get("remainingDuration"), charac,
+                    "clés_root=%s adaptOffset_root=%s sched=%s programCharacteristics=%s",
+                    list(prog.keys()),
+                    prog.get("adaptOffset"),
+                    sched,
+                    charac,
                 )
                 if isinstance(charac, dict):
                     if mode is not None:
@@ -481,7 +509,18 @@ class EasyCareClient:
                         if prog_rule is not None:
                             charac["rule"] = prog_rule
                     if adapt_offset is not None:
-                        charac["adaptOffset"] = adapt_offset
+                        # L'offset AUTO est encodé dans la matrice sched (masques 24 bits).
+                        # On remplace sched entier par la table de référence correspondante.
+                        if adapt_offset == ADAPT_OFFSET_MINUS:
+                            prog["sched"] = [list(SCHED_AUTO_ROW_MINUS)] * 7
+                            label = "AUTO-2H"
+                        elif adapt_offset == ADAPT_OFFSET_PLUS:
+                            prog["sched"] = [list(SCHED_AUTO_ROW_PLUS)] * 7
+                            label = "AUTO+2H"
+                        else:
+                            prog["sched"] = [list(SCHED_AUTO_ROW_STD)] * 7
+                            label = "AUTO-Standard"
+                        _LOGGER.debug("adaptOffset=%d → sched remplacé par table %s", adapt_offset, label)
                     modified = True
                 else:
                     _LOGGER.warning(
@@ -502,7 +541,7 @@ class EasyCareClient:
         _LOGGER.debug(
             "_update_pump_program POST — mode=%s adaptOffset=%s module=%r payload=%s",
             mode, adapt_offset, self._bpc_module_id,
-            [{k: v for k, v in p.items() if k in ("index", "state", "programCharacteristics")} for p in programs],
+            [{k: v for k, v in p.items() if k in ("index", "state", "adaptOffset", "programCharacteristics")} for p in programs],
         )
         await self._request("POST", API_HOST_EASYCARE, path, json_payload=post_payload)
         _LOGGER.debug("_update_pump_program POST envoyé avec succès")

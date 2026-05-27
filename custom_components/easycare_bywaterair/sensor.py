@@ -51,8 +51,13 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
+    ADAPT_OFFSET_MINUS,
+    ADAPT_OFFSET_PLUS,
     BPC_INDEX_PUMP,
     DOMAIN,
+    MODE_AUTO,
+    MODE_AUTO_MINUS,
+    MODE_AUTO_PLUS,
     MODULE_TYPE_AC1,
     MODULE_TYPE_PRESSURE,
 )
@@ -332,10 +337,19 @@ class EasyCarePumpStateSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], SensorE
 
 
 class EasyCareFiltrationModeSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], SensorEntity):
-    """Mode de filtration actuel : AUTO / CONTINUOUS / MANUAL / PROG."""
+    """Mode de filtration actuel — labels identiques à l'app mobile Waterair.
+
+    AUTO-2H / AUTO / AUTO+2H / ON (marche forcée) / OFF (arrêt) / PROG
+    """
 
     _attr_translation_key = "filtration_mode"
     _attr_icon = "mdi:water-sync"
+
+    # Mapping interne API → label affiché (identique app mobile)
+    _MODE_LABELS: dict[str, str] = {
+        "CONTINUOUS": "ON",
+        "MANUAL": "OFF",
+    }
 
     def __init__(self, coordinator: EasyCareBPCCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator, entry, unique_id_suffix="filtration_mode")
@@ -344,7 +358,17 @@ class EasyCareFiltrationModeSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], Se
     def native_value(self) -> str | None:
         if self.coordinator.data is None:
             return None
-        return self.coordinator.data.filtration_mode
+        mode = self.coordinator.data.filtration_mode
+        if mode is None:
+            return None
+        if mode == MODE_AUTO:
+            offset = self.coordinator.data.adapt_offset
+            if offset == ADAPT_OFFSET_MINUS:
+                return MODE_AUTO_MINUS
+            if offset == ADAPT_OFFSET_PLUS:
+                return MODE_AUTO_PLUS
+            return MODE_AUTO
+        return self._MODE_LABELS.get(mode, mode)
 
 
 class EasyCarePumpTotalRuntimeSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], SensorEntity):
@@ -413,16 +437,25 @@ class EasyCareBoostRemainingSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], Se
     def native_value(self) -> str | None:
         if self.coordinator.data is None:
             return None
-        if self.coordinator.data.pool_status is None:
-            pump = self.coordinator.data.get_input(BPC_INDEX_PUMP)
-            return pump.remaining_time if pump else None
-        return self.coordinator.data.pool_status.boost_remaining_time
+        # Source primaire : BPCInput (endpoint status BPC), seul à jour pour le boost programme
+        pump = self.coordinator.data.get_input(BPC_INDEX_PUMP)
+        if pump is not None and pump.is_boosting:
+            return pump.remaining_time
+        # Repli : pool_status (ne reflète pas les boosts programme, mais vaut mieux que rien)
+        if self.coordinator.data.pool_status is not None:
+            return self.coordinator.data.pool_status.boost_remaining_time
+        return "00:00"
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        if self.coordinator.data is None or self.coordinator.data.pool_status is None:
-            return {}
-        return {"boost_active": self.coordinator.data.pool_status.is_boosting}
+        if self.coordinator.data is None:
+            return {"boost_active": False}
+        pump = self.coordinator.data.get_input(BPC_INDEX_PUMP)
+        if pump is not None:
+            return {"boost_active": pump.is_boosting}
+        if self.coordinator.data.pool_status is not None:
+            return {"boost_active": self.coordinator.data.pool_status.is_boosting}
+        return {"boost_active": False}
 
 
 class EasyCarePressureSensor(EasyCarePressureEntity[EasyCareUserCoordinator], SensorEntity):
