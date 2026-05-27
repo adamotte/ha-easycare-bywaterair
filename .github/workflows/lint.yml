@@ -1,0 +1,45 @@
+name: Lint & import check
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ruff
+        run: pip install ruff
+
+      # Vérifie les noms non définis, imports inutilisés, erreurs de syntaxe.
+      # Attrape les typos sur les noms importés depuis .const (ex. HAHA_BOOST_ACTIVE).
+      - name: Ruff — lint
+        run: >
+          ruff check custom_components/easycare_bywaterair/
+          --select E999,F811,F821
+
+      # Importe const.py (stdlib uniquement) pour détecter les NameError
+      # liés à l'ordre de définition des constantes (ex. référence avant def).
+      - name: Import check — const.py
+        run: |
+          python - <<'EOF'
+          import importlib.util, sys
+
+          spec = importlib.util.spec_from_file_location(
+              "easycare_bywaterair.const",
+              "custom_components/easycare_bywaterair/const.py",
+          )
+          mod = importlib.util.module_from_spec(spec)
+          sys.modules["easycare_bywaterair.const"] = mod
+          spec.loader.exec_module(mod)
+          print("const.py import OK")
+          EOF
