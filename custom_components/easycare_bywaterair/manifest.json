@@ -5,9 +5,10 @@
   "config_flow": true,
   "documentation": "https://github.com/adamotte/ha-easycare-bywaterair",
   "issue_tracker": "https://github.com/adamotte/ha-easycare-bywaterair/issues",
-  "codeowners": [],
+  "codeowners": ["@adamotte"],
   "integration_type": "hub",
   "iot_class": "cloud_polling",
+  "quality_scale": "silver",
   "dependencies": [],
   "requirements": [
     "aiohttp>=3.9.0"
