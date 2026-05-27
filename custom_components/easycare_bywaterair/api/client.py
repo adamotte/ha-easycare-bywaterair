@@ -248,13 +248,24 @@ class EasyCareClient:
             if idx == 0:
                 prog_mode = int(charac.get("mode", 0) or 0)
                 prog_rule = int(charac.get("rule", 0) or 0)
+                # Log COMPLET avant tout parsing (crash-safe — s'affiche même si la suite plante).
+                _LOGGER.debug(
+                    "BPC programmes — pompe (index 0) programme brut : %s", prog
+                )
                 # adaptOffset : cherché dans sched, puis racine, puis programCharacteristics.
                 sched_val = prog.get("sched")
                 sched_offset = None
                 if isinstance(sched_val, dict):
                     sched_offset = sched_val.get("adaptOffset")
                 elif isinstance(sched_val, list) and sched_val:
-                    sched_offset = sched_val[0].get("adaptOffset")
+                    first = sched_val[0]
+                    if isinstance(first, dict):
+                        sched_offset = first.get("adaptOffset")
+                    else:
+                        _LOGGER.debug(
+                            "BPC programmes — sched[0] non-dict (type=%s) : %s",
+                            type(first).__name__, first,
+                        )
                 adapt_offset = int(
                     sched_offset
                     or prog.get("adaptOffset")
@@ -262,11 +273,9 @@ class EasyCareClient:
                     or 0
                 )
                 _LOGGER.debug(
-                    "BPC programmes — pompe (index 0) : clés_root=%s mode=%s rule=%s "
-                    "sched=%s adaptOffset_sched=%s adaptOffset_root=%s adaptOffset_charac=%s → adapt_offset=%d",
-                    list(prog.keys()),
+                    "BPC programmes — pompe (index 0) : mode=%s rule=%s "
+                    "adaptOffset_sched=%s adaptOffset_root=%s adaptOffset_charac=%s → adapt_offset=%d",
                     prog_mode, prog_rule,
-                    sched_val,
                     sched_offset, prog.get("adaptOffset"), charac.get("adaptOffset"),
                     adapt_offset,
                 )
@@ -517,8 +526,19 @@ class EasyCareClient:
                             sched["adaptOffset"] = adapt_offset
                             _LOGGER.debug("adaptOffset=%d injecté dans sched", adapt_offset)
                         elif isinstance(sched, list) and sched:
-                            sched[0]["adaptOffset"] = adapt_offset
-                            _LOGGER.debug("adaptOffset=%d injecté dans sched[0]", adapt_offset)
+                            first_sched = sched[0]
+                            if isinstance(first_sched, dict):
+                                first_sched["adaptOffset"] = adapt_offset
+                                _LOGGER.debug("adaptOffset=%d injecté dans sched[0]", adapt_offset)
+                            else:
+                                # sched[0] n'est pas un dict (type=%s) — structure inconnue.
+                                # L'offset n'est pas injecté ; le log "programme brut" permettra
+                                # d'identifier le bon emplacement.
+                                _LOGGER.warning(
+                                    "adaptOffset=%d non injecté : sched[0] est de type %s "
+                                    "(attendu dict) — sched=%s",
+                                    adapt_offset, type(first_sched).__name__, sched,
+                                )
                         else:
                             # Fallback : créer sched comme dict si absent
                             prog["sched"] = {"adaptOffset": adapt_offset}
