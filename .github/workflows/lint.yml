@@ -25,7 +25,7 @@ jobs:
       - name: Ruff — lint
         run: >
           ruff check custom_components/easycare_bywaterair/
-          --select E999,F811,F821
+          --select F811,F821
 
       # Importe const.py (stdlib uniquement) pour détecter les NameError
       # liés à l'ordre de définition des constantes (ex. référence avant def).
