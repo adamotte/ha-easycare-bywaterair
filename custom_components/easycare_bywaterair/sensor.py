@@ -51,8 +51,13 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
+    ADAPT_OFFSET_MINUS,
+    ADAPT_OFFSET_PLUS,
     BPC_INDEX_PUMP,
     DOMAIN,
+    MODE_AUTO,
+    MODE_AUTO_MINUS,
+    MODE_AUTO_PLUS,
     MODULE_TYPE_AC1,
     MODULE_TYPE_PRESSURE,
 )
@@ -332,7 +337,7 @@ class EasyCarePumpStateSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], SensorE
 
 
 class EasyCareFiltrationModeSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], SensorEntity):
-    """Mode de filtration actuel : AUTO / CONTINUOUS / MANUAL / PROG."""
+    """Mode de filtration actuel : AUTO-2H / AUTO / AUTO+2H / CONTINUOUS / MANUAL / PROG."""
 
     _attr_translation_key = "filtration_mode"
     _attr_icon = "mdi:water-sync"
@@ -344,7 +349,14 @@ class EasyCareFiltrationModeSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], Se
     def native_value(self) -> str | None:
         if self.coordinator.data is None:
             return None
-        return self.coordinator.data.filtration_mode
+        mode = self.coordinator.data.filtration_mode
+        if mode == MODE_AUTO:
+            offset = self.coordinator.data.adapt_offset
+            if offset == ADAPT_OFFSET_MINUS:
+                return MODE_AUTO_MINUS
+            if offset == ADAPT_OFFSET_PLUS:
+                return MODE_AUTO_PLUS
+        return mode
 
 
 class EasyCarePumpTotalRuntimeSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], SensorEntity):
