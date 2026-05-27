@@ -63,6 +63,29 @@ directory of your HA installation, then restart.
 
 The integration then handles automatic token renewal.
 
+## 🕐 Filtration schedule sensors
+
+Three sensors expose the BPC programme schedule, calculated in real time from the water temperature:
+
+| Sensor | Type | Description |
+|---|---|---|
+| `sensor.filtration_daily_duration` | Hours | Total filtration hours programmed for today |
+| `sensor.filtration_next_start` | Timestamp | Next scheduled pump start |
+| `sensor.filtration_next_end` | Timestamp | Next scheduled pump stop (end of current or next window) |
+
+The BPC programme stores a 24-bit bitmask per temperature threshold. The integration selects the highest threshold below the current water temperature and reads the corresponding schedule directly — no guesswork.
+
+**Semantics of `next_start` / `next_end`:**
+- **Pump currently running**: `next_end` = end of the current window, `next_start` = beginning of the next window (tomorrow's first window if none remain today)
+- **Pump currently stopped**: `next_start` / `next_end` = start and end of the next upcoming window (tomorrow's first window if all windows have passed)
+
+Multiple non-contiguous windows per day are supported (e.g. anti-freeze mode: 05h–07h and 22h–24h).
+
+The `filtration_daily_duration` sensor also exposes the following attributes:
+- `thresholds_c` — full list of configured temperature thresholds
+- `active_threshold_temp_c` — threshold currently active for the water temperature
+- `filter_windows` — list of `{start_h, end_h}` time windows
+
 ## ⚡ Energy monitoring
 
 To track pump energy consumption in the [HA Energy Dashboard](https://www.home-assistant.io/docs/energy/):
@@ -94,29 +117,6 @@ To track pump energy consumption in the [HA Energy Dashboard](https://www.home-a
 > to force off, `AUTO` to return to automatic control) — this is the
 > mechanism intended by the Waterair API and the only one that guarantees
 > consistency with the mobile app.
-
-## 🕐 Filtration schedule sensors
-
-Three sensors expose the BPC programme schedule, calculated in real time from the water temperature:
-
-| Sensor | Type | Description |
-|---|---|---|
-| `sensor.filtration_daily_duration` | Hours | Total filtration hours programmed for today |
-| `sensor.filtration_next_start` | Timestamp | Next scheduled pump start |
-| `sensor.filtration_next_end` | Timestamp | Next scheduled pump stop (end of current or next window) |
-
-The BPC programme stores a 24-bit bitmask per temperature threshold. The integration selects the highest threshold below the current water temperature and reads the corresponding schedule directly — no guesswork.
-
-**Semantics of `next_start` / `next_end`:**
-- **Pump currently running**: `next_end` = end of the current window, `next_start` = beginning of the next window (tomorrow's first window if none remain today)
-- **Pump currently stopped**: `next_start` / `next_end` = start and end of the next upcoming window (tomorrow's first window if all windows have passed)
-
-Multiple non-contiguous windows per day are supported (e.g. anti-freeze mode: 05h–07h and 22h–24h).
-
-The `filtration_daily_duration` sensor also exposes the following attributes:
-- `thresholds_c` — full list of configured temperature thresholds
-- `active_threshold_temp_c` — threshold currently active for the water temperature
-- `filter_windows` — list of `{start_h, end_h}` time windows
 
 ## 📋 Automation examples
 
