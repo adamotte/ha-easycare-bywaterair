@@ -246,7 +246,21 @@ class EasyCareClient:
             if idx == 0:
                 prog_mode = int(charac.get("mode", 0) or 0)
                 prog_rule = int(charac.get("rule", 0) or 0)
-                adapt_offset = int(charac.get("adaptOffset", 0) or 0)
+                # adaptOffset est au niveau racine du programme (comme state/remainingDuration),
+                # pas dans programCharacteristics. On tente les deux pour la robustesse.
+                adapt_offset = int(
+                    prog.get("adaptOffset")
+                    or charac.get("adaptOffset", 0)
+                    or 0
+                )
+                _LOGGER.debug(
+                    "BPC programmes — pompe (index 0) : clés_root=%s mode=%s rule=%s "
+                    "adaptOffset_root=%s adaptOffset_charac=%s → adapt_offset=%d",
+                    list(prog.keys()),
+                    prog_mode, prog_rule,
+                    prog.get("adaptOffset"), charac.get("adaptOffset"),
+                    adapt_offset,
+                )
                 if prog_mode == 0:
                     filtration_mode = "MANUAL"
                 elif prog_mode == 1:
@@ -471,8 +485,12 @@ class EasyCareClient:
                 charac = prog.get("programCharacteristics")
                 _LOGGER.debug(
                     "_update_pump_program — programme pompe avant modif : "
-                    "state=%s remainingDuration=%s programCharacteristics=%s",
-                    prog.get("state"), prog.get("remainingDuration"), charac,
+                    "clés_root=%s state=%s remainingDuration=%s "
+                    "adaptOffset_root=%s programCharacteristics=%s",
+                    list(prog.keys()),
+                    prog.get("state"), prog.get("remainingDuration"),
+                    prog.get("adaptOffset"),
+                    charac,
                 )
                 if isinstance(charac, dict):
                     if mode is not None:
@@ -481,7 +499,12 @@ class EasyCareClient:
                         if prog_rule is not None:
                             charac["rule"] = prog_rule
                     if adapt_offset is not None:
-                        charac["adaptOffset"] = adapt_offset
+                        # adaptOffset est au niveau RACINE du programme (comme state/remainingDuration),
+                        # pas dans programCharacteristics — confirmé en live : injecter dans charac
+                        # retourne HTTP 200 mais le serveur ignore silencieusement le champ.
+                        prog["adaptOffset"] = adapt_offset
+                        # Nettoyer si présent par erreur dans programCharacteristics
+                        charac.pop("adaptOffset", None)
                     modified = True
                 else:
                     _LOGGER.warning(
@@ -502,7 +525,7 @@ class EasyCareClient:
         _LOGGER.debug(
             "_update_pump_program POST — mode=%s adaptOffset=%s module=%r payload=%s",
             mode, adapt_offset, self._bpc_module_id,
-            [{k: v for k, v in p.items() if k in ("index", "state", "programCharacteristics")} for p in programs],
+            [{k: v for k, v in p.items() if k in ("index", "state", "adaptOffset", "programCharacteristics")} for p in programs],
         )
         await self._request("POST", API_HOST_EASYCARE, path, json_payload=post_payload)
         _LOGGER.debug("_update_pump_program POST envoyé avec succès")
