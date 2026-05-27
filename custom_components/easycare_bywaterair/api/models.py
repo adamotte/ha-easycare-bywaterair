@@ -456,10 +456,16 @@ class FilterSchedule:
 
     rules      : règles cyclic triées telles que retournées par l'API.
     thresholds : tableau brut `ths` (seuils de température en °C).
+    sp_on      : champ brut spON (encodage plage horaire — non encore décodé).
+    sp_ff      : champ brut spFF (encodage plage horaire — non encore décodé).
+    sp_seq     : champ brut spSeq (encodage plage horaire — non encore décodé).
     """
 
     rules: tuple[CyclicRule, ...]
     thresholds: tuple[int, ...]
+    sp_on: int | None = None
+    sp_ff: int | None = None
+    sp_seq: int | None = None
 
     @classmethod
     def from_program_characteristics(cls, charac: dict[str, Any]) -> FilterSchedule:
@@ -475,7 +481,20 @@ class FilterSchedule:
                 duration_min=int(entry.get("dur", 0)),
                 period_min=int(entry.get("per", 1)),
             ))
-        return cls(rules=tuple(rules), thresholds=ths)
+
+        def _opt_int(v: Any) -> int | None:
+            try:
+                return int(v) if v is not None else None
+            except (TypeError, ValueError):
+                return None
+
+        return cls(
+            rules=tuple(rules),
+            thresholds=ths,
+            sp_on=_opt_int(charac.get("spON")),
+            sp_ff=_opt_int(charac.get("spFF")),
+            sp_seq=_opt_int(charac.get("spSeq")),
+        )
 
     def active_rule_for_temp(self, temperature: float) -> CyclicRule | None:
         """Retourne la règle active pour une température donnée.

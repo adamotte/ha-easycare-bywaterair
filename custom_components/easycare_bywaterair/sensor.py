@@ -629,6 +629,10 @@ class EasyCareFiltrationDurationSensor(EasyCareBPCEntity[EasyCareBPCCoordinator]
                 for r in schedule.rules
             ],
             "active_threshold_temp_c": rule.threshold_temp if rule is not None else None,
+            # Champs bruts pour décoder l'encodage des plages horaires (spON/spFF/spSeq)
+            "raw_sp_on": schedule.sp_on,
+            "raw_sp_ff": schedule.sp_ff,
+            "raw_sp_seq": schedule.sp_seq,
         }
 
 
