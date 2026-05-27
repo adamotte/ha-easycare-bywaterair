@@ -15,12 +15,19 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import (
     ADAPT_OFFSET_MINUS,
     ADAPT_OFFSET_PLUS,
-    BOOST_MODES,
     DOMAIN,
-    FILTRATION_MODES_WITH_OFFSET,
+    HAHA_BOOST_ACTIVE,
+    HAHA_BOOST_OFF,
+    HA_BOOST_OPTIONS,
+    HA_FILTRATION_MODES,
+    HA_MODE_AUTO,
+    HA_MODE_AUTO_MINUS,
+    HA_MODE_AUTO_PLUS,
+    HA_MODE_CONTINUOUS,
+    HA_MODE_MANUAL,
+    HA_TO_API_BOOST,
+    HA_TO_API_FILTRATION_MODE,
     MODE_AUTO,
-    MODE_AUTO_MINUS,
-    MODE_AUTO_PLUS,
     MODE_PROG,
 )
 from .coordinator import EasyCareBPCCoordinator, EasyCareCoordinators
@@ -68,7 +75,7 @@ class EasyCareFiltrationModeSelect(
 
     _attr_translation_key = "filtration_mode"
     _attr_icon = "mdi:water-sync"
-    _attr_options = list(FILTRATION_MODES_WITH_OFFSET)
+    _attr_options = list(HA_FILTRATION_MODES)
 
     _optimistic_option: str | None = None
 
@@ -106,32 +113,34 @@ class EasyCareFiltrationModeSelect(
         if mode == MODE_AUTO:
             offset = self.coordinator.data.adapt_offset
             if offset == ADAPT_OFFSET_MINUS:
-                return MODE_AUTO_MINUS
+                return HA_MODE_AUTO_MINUS
             if offset == ADAPT_OFFSET_PLUS:
-                return MODE_AUTO_PLUS
-            return MODE_AUTO
-        return mode
+                return HA_MODE_AUTO_PLUS
+            return HA_MODE_AUTO
+        if mode == "CONTINUOUS":
+            return HA_MODE_CONTINUOUS
+        if mode == "MANUAL":
+            return HA_MODE_MANUAL
+        return None
 
     async def async_select_option(self, option: str) -> None:
         """Change le mode de filtration."""
-        if option not in FILTRATION_MODES_WITH_OFFSET:
+        api_option = HA_TO_API_FILTRATION_MODE.get(option)
+        if api_option is None:
             _LOGGER.error("Mode invalide demandé : %s", option)
             return
 
         coords: EasyCareCoordinators = self.hass.data[DOMAIN][self._entry.entry_id]
         client = coords.user._client  # noqa: SLF001
 
-        _LOGGER.info("Changement mode filtration → %s", option)
-        await client.set_filtration_mode_with_offset(option)
+        _LOGGER.info("Changement mode filtration → %s (%s)", option, api_option)
+        await client.set_filtration_mode_with_offset(api_option)
         # Mise à jour optimiste immédiate — pas de refresh immédiat,
         # le poll naturel (1 min en mode actif) confirmera le nouveau mode.
         self._optimistic_option = option
         self.async_write_ha_state()
 
 
-_BOOST_OFF = "off"
-_BOOST_ACTIVE = "active"
-_BOOST_OPTIONS = [_BOOST_OFF, _BOOST_ACTIVE] + list(BOOST_MODES)
 
 
 class EasyCareBoostSelect(EasyCareBPCEntity[EasyCareBPCCoordinator], SelectEntity):
@@ -147,7 +156,7 @@ class EasyCareBoostSelect(EasyCareBPCEntity[EasyCareBPCCoordinator], SelectEntit
 
     _attr_translation_key = "boost"
     _attr_icon = "mdi:timer-play"
-    _attr_options = _BOOST_OPTIONS
+    _attr_options = list(HA_BOOST_OPTIONS)
 
     _optimistic_option: str | None = None
 
@@ -176,11 +185,11 @@ class EasyCareBoostSelect(EasyCareBPCEntity[EasyCareBPCCoordinator], SelectEntit
     def _current_option_from_data(self) -> str:
         """Dérive l'option courante depuis les données du coordinateur."""
         if self.coordinator.data is None:
-            return _BOOST_OFF
+            return HA_BOOST_OFF
         pump = self.coordinator.data.get_input(0)
         if pump is not None and pump.is_boosting:
-            return _BOOST_ACTIVE
-        return _BOOST_OFF
+            return HA_BOOST_ACTIVE
+        return HA_BOOST_OFF
 
     @property
     def extra_state_attributes(self) -> dict:
@@ -197,13 +206,17 @@ class EasyCareBoostSelect(EasyCareBPCEntity[EasyCareBPCCoordinator], SelectEntit
         coords: EasyCareCoordinators = self.hass.data[DOMAIN][self._entry.entry_id]
         client = coords.user._client  # noqa: SLF001
 
-        if option in (_BOOST_OFF, _BOOST_ACTIVE):
+        if option in (HA_BOOST_OFF, HA_BOOST_ACTIVE):
             _LOGGER.info("Annulation boost")
             await client.cancel_boost()
-            self._optimistic_option = _BOOST_OFF
+            self._optimistic_option = HA_BOOST_OFF
         else:
-            _LOGGER.info("Démarrage boost %s", option)
-            await client.start_boost(option)
-            self._optimistic_option = _BOOST_ACTIVE
+            api_boost = HA_TO_API_BOOST.get(option)
+            if api_boost is None:
+                _LOGGER.error("Mode boost invalide : %s", option)
+                return
+            _LOGGER.info("Démarrage boost %s (%s)", option, api_boost)
+            await client.start_boost(api_boost)
+            self._optimistic_option = HA_BOOST_ACTIVE
         # Pas de refresh immédiat — poll naturel (1 min) confirmera l'état.
         self.async_write_ha_state()

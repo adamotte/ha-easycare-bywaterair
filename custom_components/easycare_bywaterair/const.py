@@ -97,6 +97,53 @@ FILTRATION_MODES_WITH_OFFSET: Final = (
 )
 """Modes exposés dans le sélecteur HA — inclut les 3 variantes AUTO."""
 
+# Clés HA valides (hassfest : [a-z0-9-_]+, pas de majuscules ni de +)
+HA_MODE_AUTO_MINUS: Final = "auto_minus_2h"
+HA_MODE_AUTO: Final = "auto"
+HA_MODE_AUTO_PLUS: Final = "auto_plus_2h"
+HA_MODE_CONTINUOUS: Final = "continuous"
+HA_MODE_MANUAL: Final = "manual"
+HA_MODE_PROG: Final = "prog"
+HA_MODE_ON: Final = "on"
+HA_MODE_OFF: Final = "off"
+
+HA_FILTRATION_MODES: Final = (
+    HA_MODE_AUTO_MINUS, HA_MODE_AUTO, HA_MODE_AUTO_PLUS,
+    HA_MODE_CONTINUOUS, HA_MODE_MANUAL,
+)
+
+HA_TO_API_FILTRATION_MODE: Final[dict[str, str]] = {
+    HA_MODE_AUTO_MINUS: MODE_AUTO_MINUS,
+    HA_MODE_AUTO: MODE_AUTO,
+    HA_MODE_AUTO_PLUS: MODE_AUTO_PLUS,
+    HA_MODE_CONTINUOUS: MODE_CONTINUOUS,
+    HA_MODE_MANUAL: MODE_MANUAL,
+}
+
+HA_BOOST_OFF: Final = "off"
+HA_BOOST_ACTIVE: Final = "active"
+HA_BOOST_4H: Final = "boost_4h"
+HA_BOOST_12H: Final = "boost_12h"
+HA_BOOST_24H: Final = "boost_24h"
+HA_BOOST_36H: Final = "boost_36h"
+HA_BOOST_48H: Final = "boost_48h"
+HA_BOOST_72H: Final = "boost_72h"
+
+HA_BOOST_OPTIONS: Final = (
+    HA_BOOST_OFF, HA_BOOST_ACTIVE,
+    HA_BOOST_4H, HA_BOOST_12H, HA_BOOST_24H,
+    HA_BOOST_36H, HA_BOOST_48H, HA_BOOST_72H,
+)
+
+HA_TO_API_BOOST: Final[dict[str, str]] = {
+    HA_BOOST_4H: BOOST_MODE_4H,
+    HA_BOOST_12H: BOOST_MODE_12H,
+    HA_BOOST_24H: BOOST_MODE_24H,
+    HA_BOOST_36H: BOOST_MODE_36H,
+    HA_BOOST_48H: BOOST_MODE_48H,
+    HA_BOOST_72H: BOOST_MODE_72H,
+}
+
 ADAPT_OFFSET_MINUS: Final = -60
 ADAPT_OFFSET_NEUTRAL: Final = 0
 ADAPT_OFFSET_PLUS: Final = 60

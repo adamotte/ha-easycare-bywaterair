@@ -72,11 +72,11 @@
       "filtration_mode": {
         "name": "Filtration mode",
         "state": {
-          "AUTO-2H": "Auto -2h",
-          "AUTO": "Auto",
-          "AUTO+2H": "Auto +2h",
-          "CONTINUOUS": "On",
-          "MANUAL": "Off"
+          "auto_minus_2h": "Auto -2h",
+          "auto": "Auto",
+          "auto_plus_2h": "Auto +2h",
+          "continuous": "On",
+          "manual": "Off"
         }
       },
       "boost": {
@@ -84,12 +84,12 @@
         "state": {
           "off": "Inactive",
           "active": "Active",
-          "BOOST4H": "4 hours",
-          "BOOST12H": "12 hours",
-          "BOOST24H": "24 hours",
-          "BOOST36H": "36 hours",
-          "BOOST48H": "48 hours",
-          "BOOST72H": "72 hours"
+          "boost_4h": "4 hours",
+          "boost_12h": "12 hours",
+          "boost_24h": "24 hours",
+          "boost_36h": "36 hours",
+          "boost_48h": "48 hours",
+          "boost_72h": "72 hours"
         }
       }
     },
@@ -108,12 +108,12 @@
       "filtration_mode": {
         "name": "Filtration mode",
         "state": {
-          "AUTO-2H": "Auto -2h",
-          "AUTO": "Auto",
-          "AUTO+2H": "Auto +2h",
-          "ON": "On",
-          "OFF": "Off",
-          "PROG": "Prog"
+          "auto_minus_2h": "Auto -2h",
+          "auto": "Auto",
+          "auto_plus_2h": "Auto +2h",
+          "on": "On",
+          "off": "Off",
+          "prog": "Prog"
         }
       },
       "pump_power": {"name": "Pump power"},

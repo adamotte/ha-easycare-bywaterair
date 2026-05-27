@@ -59,9 +59,13 @@ from .const import (
     BPC_INDEX_PUMP,
     CONF_PUMP_POWER_W,
     DOMAIN,
+    HA_MODE_AUTO,
+    HA_MODE_AUTO_MINUS,
+    HA_MODE_AUTO_PLUS,
+    HA_MODE_OFF,
+    HA_MODE_ON,
+    HA_MODE_PROG,
     MODE_AUTO,
-    MODE_AUTO_MINUS,
-    MODE_AUTO_PLUS,
     MODULE_TYPE_AC1,
     MODULE_TYPE_PRESSURE,
 )
@@ -358,10 +362,11 @@ class EasyCareFiltrationModeSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], Se
     _attr_translation_key = "filtration_mode"
     _attr_icon = "mdi:water-sync"
 
-    # Mapping interne API → label affiché (identique app mobile)
+    # Mapping API → clé HA valide
     _MODE_LABELS: dict[str, str] = {
-        "CONTINUOUS": "ON",
-        "MANUAL": "OFF",
+        "CONTINUOUS": HA_MODE_ON,
+        "MANUAL": HA_MODE_OFF,
+        "PROG": HA_MODE_PROG,
     }
 
     def __init__(self, coordinator: EasyCareBPCCoordinator, entry: ConfigEntry) -> None:
@@ -377,11 +382,11 @@ class EasyCareFiltrationModeSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], Se
         if mode == MODE_AUTO:
             offset = self.coordinator.data.adapt_offset
             if offset == ADAPT_OFFSET_MINUS:
-                return MODE_AUTO_MINUS
+                return HA_MODE_AUTO_MINUS
             if offset == ADAPT_OFFSET_PLUS:
-                return MODE_AUTO_PLUS
-            return MODE_AUTO
-        return self._MODE_LABELS.get(mode, mode)
+                return HA_MODE_AUTO_PLUS
+            return HA_MODE_AUTO
+        return self._MODE_LABELS.get(mode, mode.lower())
 
 
 class EasyCarePumpTotalRuntimeSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], SensorEntity):

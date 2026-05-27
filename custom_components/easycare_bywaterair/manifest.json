@@ -1,16 +1,16 @@
 {
   "domain": "easycare_bywaterair",
   "name": "easy·care by Waterair",
-  "version": "1.0.0",
-  "config_flow": true,
-  "documentation": "https://github.com/adamotte/ha-easycare-bywaterair",
-  "issue_tracker": "https://github.com/adamotte/ha-easycare-bywaterair/issues",
   "codeowners": ["@adamotte"],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/adamotte/ha-easycare-bywaterair",
   "integration_type": "hub",
   "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/adamotte/ha-easycare-bywaterair/issues",
   "quality_scale": "silver",
-  "dependencies": [],
   "requirements": [
     "aiohttp>=3.9.0"
-  ]
+  ],
+  "version": "1.0.1"
 }
