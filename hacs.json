@@ -3,6 +3,5 @@
   "homeassistant": "2024.1.0",
   "render_readme": true,
   "zip_release": false,
-  "content_in_root": false,
-  "category": "integration"
+  "content_in_root": false
 }
