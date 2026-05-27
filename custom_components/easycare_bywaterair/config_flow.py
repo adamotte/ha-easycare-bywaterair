@@ -11,7 +11,8 @@ from typing import Any
 
 import aiohttp
 import voluptuous as vol
-from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult
+from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
+from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api.auth import EasyCareAuth
@@ -30,6 +31,7 @@ from .const import (
     CONF_ID_TOKEN,
     CONF_ID_TOKEN_EXPIRES_AT,
     CONF_POOL_ID,
+    CONF_PUMP_POWER_W,
     CONF_REFRESH_TOKEN,
     DOMAIN,
 )
@@ -53,6 +55,11 @@ class EasyCareConfigFlow(ConfigFlow, domain=DOMAIN):
 
     def __init__(self) -> None:
         self._reauth_entry: ConfigEntry | None = None
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: ConfigEntry) -> "EasyCareOptionsFlow":
+        return EasyCareOptionsFlow()
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Étape principale : affichage du lien OAuth2 + saisie du code."""
@@ -158,3 +165,21 @@ class EasyCareConfigFlow(ConfigFlow, domain=DOMAIN):
             except IndexError:
                 pass
         return input_str
+
+
+class EasyCareOptionsFlow(OptionsFlow):
+    """Options flow pour configurer la puissance de la pompe."""
+
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Étape unique : saisie de la puissance nominale de la pompe."""
+        if user_input is not None:
+            return self.async_create_entry(data=user_input)
+        current_power = self.config_entry.options.get(CONF_PUMP_POWER_W, 0)
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema({
+                vol.Optional(CONF_PUMP_POWER_W, default=current_power): vol.All(
+                    vol.Coerce(int), vol.Range(min=0, max=10000)
+                ),
+            }),
+        )

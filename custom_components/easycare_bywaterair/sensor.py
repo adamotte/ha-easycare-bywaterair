@@ -43,6 +43,8 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     PERCENTAGE,
     EntityCategory,
+    UnitOfEnergy,
+    UnitOfPower,
     UnitOfPressure,
     UnitOfTemperature,
     UnitOfTime,
@@ -54,6 +56,7 @@ from .const import (
     ADAPT_OFFSET_MINUS,
     ADAPT_OFFSET_PLUS,
     BPC_INDEX_PUMP,
+    CONF_PUMP_POWER_W,
     DOMAIN,
     MODE_AUTO,
     MODE_AUTO_MINUS,
@@ -107,6 +110,12 @@ async def async_setup_entry(
             EasyCarePumpCounterDateSensor(coords.bpc, entry),
             EasyCareBoostRemainingSensor(coords.bpc, entry),
         ])
+        pump_power_w: int = entry.options.get(CONF_PUMP_POWER_W, 0)
+        if pump_power_w > 0:
+            sensors.extend([
+                EasyCarePumpPowerSensor(coords.bpc, entry, pump_power_w),
+                EasyCarePumpEnergySensor(coords.bpc, entry, pump_power_w),
+            ])
         n = bpc.number_of_inputs
         if n >= 1:
             sensors.append(EasyCareSpotModeSensor(coords.bpc, entry))
@@ -396,6 +405,63 @@ class EasyCarePumpTotalRuntimeSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], 
         if minutes is None:
             return None
         return round(minutes / 60, 1)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        if self.coordinator.data is None:
+            return {}
+        reset = self.coordinator.data.pump_activation_reset_date
+        return {"counter_reset_date": reset.date().isoformat() if reset else None}
+
+
+class EasyCarePumpPowerSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], SensorEntity):
+    """Puissance instantanée de la pompe (W nominaux configurés, 0 si arrêtée)."""
+
+    _attr_translation_key = "pump_power"
+    _attr_device_class = SensorDeviceClass.POWER
+    _attr_native_unit_of_measurement = UnitOfPower.WATT
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_suggested_display_precision = 0
+
+    def __init__(self, coordinator: EasyCareBPCCoordinator, entry: ConfigEntry, power_w: int) -> None:
+        super().__init__(coordinator, entry, unique_id_suffix="pump_power")
+        self._power_w = power_w
+
+    @property
+    def native_value(self) -> int | None:
+        if self.coordinator.data is None:
+            return None
+        pump = self.coordinator.data.get_input(BPC_INDEX_PUMP)
+        if pump is None:
+            return None
+        return self._power_w if pump.is_on else 0
+
+
+class EasyCarePumpEnergySensor(EasyCareBPCEntity[EasyCareBPCCoordinator], SensorEntity):
+    """Énergie cumulée de la pompe depuis la date de remise à zéro du compteur.
+
+    Calculée à partir du temps total d'activation (minutes) et de la puissance
+    nominale configurée. Compatible avec le dashboard énergie de HA.
+    """
+
+    _attr_translation_key = "pump_energy"
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_suggested_display_precision = 3
+
+    def __init__(self, coordinator: EasyCareBPCCoordinator, entry: ConfigEntry, power_w: int) -> None:
+        super().__init__(coordinator, entry, unique_id_suffix="pump_energy")
+        self._power_w = power_w
+
+    @property
+    def native_value(self) -> float | None:
+        if self.coordinator.data is None:
+            return None
+        minutes = self.coordinator.data.pump_total_activation_minutes
+        if minutes is None:
+            return None
+        return round(minutes / 60 * self._power_w / 1000, 3)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:

@@ -29,6 +29,20 @@
       "reauth_successful": "Ré-authentification réussie."
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "easy·care — Puissance de la pompe",
+        "description": "Configurez la puissance nominale de votre pompe de filtration pour activer le suivi de consommation dans le dashboard énergie de HA. Mettez 0 pour désactiver.",
+        "data": {
+          "pump_power_w": "Puissance nominale de la pompe (W)"
+        },
+        "data_description": {
+          "pump_power_w": "Puissance nominale en watts (ex. 150 pour une pompe P35). Mettez 0 pour désactiver les capteurs d'énergie."
+        }
+      }
+    }
+  },
   "entity": {
     "binary_sensor": {
       "connection": {
@@ -102,6 +116,8 @@
           "PROG": "Prog"
         }
       },
+      "pump_power": {"name": "Puissance pompe"},
+      "pump_energy": {"name": "Énergie pompe"},
       "pump_total_runtime": {"name": "Durée totale pompe"},
       "pump_counter_date": {"name": "Date référence compteur"},
       "boost_remaining": {"name": "Temps boost restant"},

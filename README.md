@@ -22,6 +22,7 @@ Home Assistant integration for pools equipped with the
 - 📊 Filtration pressure (if LR-PR sensor is present)
 - 🔔 Notifications and active treatments
 - ⚙️ Current filtration mode and pump counters
+- ⚡ **Energy monitoring**: pump power (W) and cumulative energy (kWh) — compatible with the HA Energy Dashboard
 - 💡 **Light mode**: AUTO / MANUAL / OFF / PAUSE (with time slots and pause duration as attributes)
 
 ### Control
@@ -60,6 +61,20 @@ directory of your HA installation, then restart.
 7. Paste it into HA and confirm
 
 The integration then handles automatic token renewal.
+
+## ⚡ Energy monitoring
+
+To track pump energy consumption in the [HA Energy Dashboard](https://www.home-assistant.io/docs/energy/):
+
+1. Go to **Settings → Devices & Services → easy·care by Waterair → Configure**
+2. Enter the **rated power of your pump in watts** (e.g. `150` for a P35)
+3. Confirm — the integration reloads and two new sensors appear on the BPC device:
+   - **Pump power** (`sensor.*_pump_power`) — instantaneous consumption in W (rated power when running, 0 when stopped)
+   - **Pump energy** (`sensor.*_pump_energy`) — cumulative energy in kWh since the last counter reset
+4. In **Settings → Energy → Individual devices → Add device**, select **Pump energy**
+
+> The energy sensor uses the cumulative runtime counter already provided by the BPC module.
+> Setting the power to `0` disables both sensors.
 
 ## 🎛️ Available services
 

@@ -29,6 +29,20 @@
       "reauth_successful": "Re-authentication successful."
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "easy·care — Pump power",
+        "description": "Configure the rated power of your filtration pump to enable energy monitoring in the HA energy dashboard. Set to 0 to disable.",
+        "data": {
+          "pump_power_w": "Pump rated power (W)"
+        },
+        "data_description": {
+          "pump_power_w": "Nominal power of your pump in watts (e.g. 150 for a P35). Set to 0 to disable energy sensors."
+        }
+      }
+    }
+  },
   "entity": {
     "binary_sensor": {
       "connection": {
@@ -91,6 +105,8 @@
           "PROG": "Prog"
         }
       },
+      "pump_power": {"name": "Pump power"},
+      "pump_energy": {"name": "Pump energy"},
       "pump_total_runtime": {"name": "Pump total runtime"},
       "pump_counter_date": {"name": "Counter reference date"},
       "boost_remaining": {"name": "Boost remaining"},
