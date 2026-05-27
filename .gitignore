@@ -45,3 +45,5 @@ desktop.ini
 
 # Claude Code
 CLAUDE.md
+.claude/
+.preview/
