@@ -456,14 +456,24 @@ class EasyCareClient:
             watbox_serial=self._watbox.serial_number, bpc_name=self._bpc.short_name,
         )
         data = await self._request("GET", API_HOST_EASYCARE, path)
+        _LOGGER.debug("_update_pump_program GET — clés réponse : %s", list(data.keys()))
         programs = data.get("programs")
         if not programs:
-            _LOGGER.warning("_update_pump_program: aucun programme reçu")
+            _LOGGER.warning("_update_pump_program: aucun programme reçu — réponse : %s", data)
             return
+        _LOGGER.debug(
+            "_update_pump_program: %d programme(s), indices=%s, bpc_module_id=%r",
+            len(programs), [p.get("index") for p in programs], self._bpc_module_id,
+        )
         modified = False
         for prog in programs:
             if prog.get("index") == 0:
                 charac = prog.get("programCharacteristics")
+                _LOGGER.debug(
+                    "_update_pump_program — programme pompe avant modif : "
+                    "state=%s remainingDuration=%s programCharacteristics=%s",
+                    prog.get("state"), prog.get("remainingDuration"), charac,
+                )
                 if isinstance(charac, dict):
                     if mode is not None:
                         prog_mode, prog_rule = _MODE_TO_PROG[mode]
@@ -473,17 +483,29 @@ class EasyCareClient:
                     if adapt_offset is not None:
                         charac["adaptOffset"] = adapt_offset
                     modified = True
+                else:
+                    _LOGGER.warning(
+                        "_update_pump_program: programCharacteristics absent ou non-dict : %r", charac
+                    )
                 break
         if not modified:
-            _LOGGER.warning("_update_pump_program: programme pompe (index 0) absent")
+            _LOGGER.warning(
+                "_update_pump_program: programme pompe (index 0) absent parmi %s",
+                [p.get("index") for p in programs],
+            )
             return
-        _LOGGER.debug("_update_pump_program: mode=%s adaptOffset=%s", mode, adapt_offset)
         post_payload: dict[str, Any] = {
             "programs": programs,
             "module": self._bpc_module_id,
             "programmationType": 1,
         }
+        _LOGGER.debug(
+            "_update_pump_program POST — mode=%s adaptOffset=%s module=%r payload=%s",
+            mode, adapt_offset, self._bpc_module_id,
+            [{k: v for k, v in p.items() if k in ("index", "state", "programCharacteristics")} for p in programs],
+        )
         await self._request("POST", API_HOST_EASYCARE, path, json_payload=post_payload)
+        _LOGGER.debug("_update_pump_program POST envoyé avec succès")
 
     async def _request(
         self,
