@@ -98,7 +98,19 @@
       "chlorine": {"name": "Chlorine (ORP)"},
       "temperature": {"name": "Water temperature"},
       "pressure": {"name": "Filtration pressure"},
-      "notification": {"name": "Last notification"},
+      "notification": {
+        "name": "Last notification",
+        "state": {
+          "None": "No active notification",
+          "shouldBeCalibrated": "AC1 calibration required",
+          "shouldBeWintered": "Pool wintering required",
+          "shouldBePutBackIntoOperation": "Pool restart required",
+          "shouldDoChlorineTreatment": "Chlorine treatment recommended",
+          "pHCanShouldBeReplaced": "pH container to replace",
+          "pHCalibrationNecessary": "pH calibration required",
+          "severalInsufficientFillings": "Several insufficient fillings"
+        }
+      },
       "treatment": {"name": "Active treatment"},
       "battery_ac1": {"name": "AC1 battery"},
       "pump_state": {

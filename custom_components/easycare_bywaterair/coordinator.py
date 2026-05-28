@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from homeassistant.components.persistent_notification import async_create as pn_create
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
@@ -52,6 +53,18 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+# Messages lisibles pour les notifications persistantes HA.
+# Clé = valeur brute du champ `action` retournée par l'API Waterair.
+_POOL_ACTION_MESSAGES: dict[str, str] = {
+    "shouldBeCalibrated": "Your AC1 analyser should be calibrated. Open the Waterair app to proceed.",
+    "shouldBeWintered": "Your pool should be winterized. Open the Waterair app for the procedure.",
+    "shouldBePutBackIntoOperation": "Your pool should be put back into operation. Open the Waterair app for the procedure.",
+    "shouldDoChlorineTreatment": "A chlorine treatment is recommended for your pool.",
+    "pHCanShouldBeReplaced": "Your pH container should be replaced.",
+    "pHCalibrationNecessary": "pH calibration is required for your pool.",
+    "severalInsufficientFillings": "Several insufficient water fillings have been detected.",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -138,6 +151,7 @@ class EasyCareUserCoordinator(DataUpdateCoordinator[UserData]):
         )
         self._client = client
         self._last_fetched_at: datetime | None = None
+        self._last_notified_action: str | None = None
 
     @property
     def last_fetched_at(self) -> datetime | None:
@@ -177,7 +191,33 @@ class EasyCareUserCoordinator(DataUpdateCoordinator[UserData]):
 
         self._last_fetched_at = datetime.now(tz=timezone.utc)
         _LOGGER.debug("User update OK : pH=%s, T=%s°C", metrics.ph_value, metrics.temperature_value)
-        return UserData(client=client, pool=pool, metrics=metrics, alerts=alerts, treatment=treatment)
+        result = UserData(client=client, pool=pool, metrics=metrics, alerts=alerts, treatment=treatment)
+        self._maybe_notify_pool_action(alerts)
+        return result
+
+    def _maybe_notify_pool_action(self, alerts: Alerts) -> None:
+        """Crée une notification HA persistante si une nouvelle action piscine est détectée.
+
+        La notification n'est créée que lorsque l'action change, pour éviter
+        de recréer la même notification à chaque refresh (toutes les 30 min).
+        L'utilisateur peut fermer la notification — elle ne réapparaîtra que si
+        une action différente est détectée. Au redémarrage de HA, la mémoire est
+        perdue : une notification sera recréée une seule fois si une action est active.
+        """
+        action = alerts.latest_action
+        if not action or action == "None":
+            return
+        if action == self._last_notified_action:
+            return
+        self._last_notified_action = action
+        message = _POOL_ACTION_MESSAGES.get(action, action)
+        _LOGGER.info("Nouvelle action piscine détectée : %s", action)
+        pn_create(
+            self.hass,
+            message=message,
+            title="easy·care by Waterair",
+            notification_id="easycare_bywaterair_pool_action",
+        )
 
 
 class EasyCareModulesCoordinator(DataUpdateCoordinator[tuple[Module, ...]]):

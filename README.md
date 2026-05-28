@@ -9,6 +9,15 @@
 [![Last commit](https://img.shields.io/github/last-commit/adamotte/ha-easycare-bywaterair/main?style=flat-square)](https://github.com/adamotte/ha-easycare-bywaterair/commits/main)
 [![Issues](https://img.shields.io/github/issues/adamotte/ha-easycare-bywaterair?style=flat-square)](https://github.com/adamotte/ha-easycare-bywaterair/issues)
 [![Stars](https://img.shields.io/github/stars/adamotte/ha-easycare-bywaterair?style=flat-square)](https://github.com/adamotte/ha-easycare-bywaterair/stargazers)
+[![Donate](https://img.shields.io/badge/Donate-PayPal-blue?logo=paypal&style=flat-square)](https://paypal.me/AnthonyDAMOTTE)
+
+---
+
+Enjoying this integration? A donation helps keep it going!
+
+[![Donate](https://www.paypalobjects.com/en_US/i/btn/btn_donate_LG.gif)](https://paypal.me/AnthonyDAMOTTE)
+
+---
 
 Home Assistant integration for pools equipped with the
 **easy·care by Waterair** ecosystem (WATBOX + BPC + AC1).

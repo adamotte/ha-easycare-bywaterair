@@ -98,7 +98,19 @@
       "chlorine": {"name": "Chlore (Redox)"},
       "temperature": {"name": "Température de l'eau"},
       "pressure": {"name": "Pression filtration"},
-      "notification": {"name": "Dernière notification"},
+      "notification": {
+        "name": "Dernière notification",
+        "state": {
+          "None": "Aucune notification active",
+          "shouldBeCalibrated": "Calibration AC1 requise",
+          "shouldBeWintered": "Hivernage de la piscine requis",
+          "shouldBePutBackIntoOperation": "Remise en service de la piscine requise",
+          "shouldDoChlorineTreatment": "Traitement chlore recommandé",
+          "pHCanShouldBeReplaced": "Bidon pH à remplacer",
+          "pHCalibrationNecessary": "Calibration pH requise",
+          "severalInsufficientFillings": "Plusieurs remplissages insuffisants"
+        }
+      },
       "treatment": {"name": "Traitement actif"},
       "battery_ac1": {"name": "Batterie AC1"},
       "pump_state": {

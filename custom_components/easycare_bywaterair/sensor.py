@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import logging
 import math
-from datetime import date, datetime, timezone
+from datetime import date, datetime
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -641,11 +641,11 @@ class EasyCareDetailSensor(EasyCareWATBOXEntity[EasyCareUserCoordinator], Sensor
 class EasyCareFiltrationDurationSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], SensorEntity):
     """Durée de filtration journalière depuis les masques horaires BPC (sched).
 
-    Calcul par popcount du masque 24 bits actif pour la température de référence.
-    Fallback sur le ratio dur/per (cyclic) si sched est absent.
-    La température de référence est lue depuis maxTemperatureTheDayBefore (BPC),
-    avec fallback sur la température courante AC1.
-    Retourne None (unavailable) si aucune température n'est disponible.
+    Calcul par popcount du masque 24 bits actif pour le seuil sélectionné par le BPC.
+    Source primaire : BPCInput.temp_ref (index committé par le BPC au démarrage du
+    cycle matinal, stable toute la journée).
+    Fallback sur la température courante AC1 si temp_ref absent.
+    Retourne None (unavailable) si aucune source de seuil n'est disponible.
     """
 
     _attr_translation_key = "filtration_daily_duration"
@@ -664,21 +664,25 @@ class EasyCareFiltrationDurationSensor(EasyCareBPCEntity[EasyCareBPCCoordinator]
         super().__init__(coordinator, entry, unique_id_suffix="filtration_daily_duration")
         self._user_coordinator = user_coordinator
 
-    def _get_ref_temperature(self) -> float | None:
-        """Température de référence pour la sélection du seuil de filtration.
+    def _get_threshold_idx_or_temp(self) -> tuple[int | None, float | None]:
+        """Retourne (threshold_idx, ref_temp) pour les lookups de planning.
 
-        Source primaire : champ `temperature` du status BPC (seuil committé par le BPC
-                          au démarrage du cycle journalier, ex. 27°C → seuil index 6).
-        Fallback 1      : maxTemperatureTheDayBefore (actuellement absent de l'API).
-        Fallback 2      : température courante de l'eau depuis l'AC1.
+        Source primaire : BPCInput.temp_ref — index commité par le BPC au démarrage
+        du cycle journalier (ex. 6 → 27°C → 9h–19h). Stable toute la journée.
+        Fallback       : température courante de l'eau depuis l'AC1.
+
+        L'un au moins est non-None si des données sont disponibles.
         """
-        if self.coordinator.data is not None and self.coordinator.data.bpc_temp_reference is not None:
-            return float(self.coordinator.data.bpc_temp_reference)
-        if self.coordinator.data is not None and self.coordinator.data.max_temp_day_before is not None:
-            return self.coordinator.data.max_temp_day_before
-        if self._user_coordinator.data is None:
-            return None
-        return self._user_coordinator.data.metrics.temperature_value
+        if self.coordinator.data is not None:
+            pump = self.coordinator.data.get_input(BPC_INDEX_PUMP)
+            if pump is not None and pump.temp_ref is not None:
+                return pump.temp_ref, None
+        # Fallback température (water temp AC1)
+        if self._user_coordinator.data is not None:
+            t = self._user_coordinator.data.metrics.temperature_value
+            if t is not None:
+                return None, t
+        return None, None
 
     @property
     def native_value(self) -> float | None:
@@ -687,15 +691,16 @@ class EasyCareFiltrationDurationSensor(EasyCareBPCEntity[EasyCareBPCCoordinator]
         schedule = self.coordinator.data.filter_schedule
         if schedule is None:
             return None
-        ref_temp = self._get_ref_temperature()
-        if ref_temp is None:
+        threshold_idx, ref_temp = self._get_threshold_idx_or_temp()
+        if threshold_idx is None and ref_temp is None:
             return None
+        temp = ref_temp if ref_temp is not None else 0.0
         # Source primaire : masque sched (popcount) — précis à l'heure près
-        hours = schedule.daily_hours_from_sched(ref_temp)
+        hours = schedule.daily_hours_from_sched(temp, threshold_idx=threshold_idx)
         if hours is not None:
             return hours
         # Fallback : ratio dur/per depuis les règles cyclic
-        rule = schedule.active_rule_for_temp(ref_temp)
+        rule = schedule.active_rule_for_temp(temp, threshold_idx=threshold_idx)
         return rule.daily_hours if rule is not None else None
 
     @property
@@ -705,35 +710,36 @@ class EasyCareFiltrationDurationSensor(EasyCareBPCEntity[EasyCareBPCCoordinator]
         schedule = self.coordinator.data.filter_schedule
         if schedule is None:
             return {}
-        ref_temp = self._get_ref_temperature()
-        max_temp_yesterday = self.coordinator.data.max_temp_day_before
+        threshold_idx, ref_temp = self._get_threshold_idx_or_temp()
         current_temp = (
             self._user_coordinator.data.metrics.temperature_value
             if self._user_coordinator.data is not None
             else None
         )
 
-        bpc_temp_ref = self.coordinator.data.bpc_temp_reference
-
         attrs: dict[str, Any] = {
             "thresholds_c": list(schedule.thresholds),
-            "bpc_temp_reference_c": bpc_temp_ref,
-            "max_temp_yesterday_c": max_temp_yesterday,
+            "bpc_temp_ref_idx": threshold_idx,
             "current_water_temp_c": current_temp,
         }
 
-        if ref_temp is not None:
-            idx = schedule.active_threshold_index_for_temp(ref_temp)
-            attrs["active_threshold_temp_c"] = (
-                schedule.thresholds[idx] if idx is not None else None
-            )
-            windows = schedule.filter_windows_from_sched(ref_temp)
+        # Résolution du seuil actif
+        effective_idx = threshold_idx
+        if effective_idx is None and ref_temp is not None:
+            effective_idx = schedule.active_threshold_index_for_temp(ref_temp)
+        attrs["active_threshold_temp_c"] = (
+            schedule.thresholds[effective_idx]
+            if effective_idx is not None and effective_idx < len(schedule.thresholds)
+            else None
+        )
+
+        temp = ref_temp if ref_temp is not None else 0.0
+        if threshold_idx is not None or ref_temp is not None:
+            windows = schedule.filter_windows_from_sched(temp, threshold_idx=threshold_idx)
             if windows is not None:
                 attrs["filter_windows"] = [
                     {"start_h": s, "end_h": e} for s, e in windows
                 ]
-        else:
-            attrs["active_threshold_temp_c"] = None
 
         return attrs
 
@@ -741,7 +747,7 @@ class EasyCareFiltrationDurationSensor(EasyCareBPCEntity[EasyCareBPCCoordinator]
 class _FiltrationScheduleSensorBase(EasyCareBPCEntity[EasyCareBPCCoordinator], SensorEntity):
     """Classe de base pour les sensors de planning de filtration.
 
-    Partage la logique d'accès au FilterSchedule et à la température de référence.
+    Partage la logique d'accès au FilterSchedule et au seuil BPC de référence.
     """
 
     def __init__(
@@ -755,21 +761,25 @@ class _FiltrationScheduleSensorBase(EasyCareBPCEntity[EasyCareBPCCoordinator], S
         super().__init__(coordinator, entry, unique_id_suffix=unique_id_suffix)
         self._user_coordinator = user_coordinator
 
-    def _get_ref_temperature(self) -> float | None:
-        """Température de référence pour la sélection du seuil de filtration.
+    def _get_threshold_idx_or_temp(self) -> tuple[int | None, float | None]:
+        """Retourne (threshold_idx, ref_temp) pour les lookups de planning.
 
-        Source primaire : champ `temperature` du status BPC (seuil committé par le BPC
-                          au démarrage du cycle journalier, ex. 27°C → seuil index 6).
-        Fallback 1      : maxTemperatureTheDayBefore (actuellement absent de l'API).
-        Fallback 2      : température courante de l'eau depuis l'AC1.
+        Source primaire : BPCInput.temp_ref — index commité par le BPC au démarrage
+        du cycle journalier (ex. 6 → 27°C → 9h–19h). Stable toute la journée.
+        Fallback       : température courante de l'eau depuis l'AC1.
+
+        L'un au moins est non-None si des données sont disponibles.
         """
-        if self.coordinator.data is not None and self.coordinator.data.bpc_temp_reference is not None:
-            return float(self.coordinator.data.bpc_temp_reference)
-        if self.coordinator.data is not None and self.coordinator.data.max_temp_day_before is not None:
-            return self.coordinator.data.max_temp_day_before
-        if self._user_coordinator.data is None:
-            return None
-        return self._user_coordinator.data.metrics.temperature_value
+        if self.coordinator.data is not None:
+            pump = self.coordinator.data.get_input(BPC_INDEX_PUMP)
+            if pump is not None and pump.temp_ref is not None:
+                return pump.temp_ref, None
+        # Fallback température (water temp AC1)
+        if self._user_coordinator.data is not None:
+            t = self._user_coordinator.data.metrics.temperature_value
+            if t is not None:
+                return None, t
+        return None, None
 
 
 class EasyCareFiltrationNextStartSensor(_FiltrationScheduleSensorBase):
@@ -802,10 +812,11 @@ class EasyCareFiltrationNextStartSensor(_FiltrationScheduleSensorBase):
         schedule = self.coordinator.data.filter_schedule
         if schedule is None:
             return None
-        ref_temp = self._get_ref_temperature()
-        if ref_temp is None:
+        threshold_idx, ref_temp = self._get_threshold_idx_or_temp()
+        if threshold_idx is None and ref_temp is None:
             return None
-        next_start, _ = schedule.next_filtration_events(ref_temp, dt_util.now())
+        temp = ref_temp if ref_temp is not None else 0.0
+        next_start, _ = schedule.next_filtration_events(temp, dt_util.now(), threshold_idx=threshold_idx)
         return next_start
 
 
@@ -838,10 +849,11 @@ class EasyCareFiltrationNextEndSensor(_FiltrationScheduleSensorBase):
         schedule = self.coordinator.data.filter_schedule
         if schedule is None:
             return None
-        ref_temp = self._get_ref_temperature()
-        if ref_temp is None:
+        threshold_idx, ref_temp = self._get_threshold_idx_or_temp()
+        if threshold_idx is None and ref_temp is None:
             return None
-        _, next_end = schedule.next_filtration_events(ref_temp, dt_util.now())
+        temp = ref_temp if ref_temp is not None else 0.0
+        _, next_end = schedule.next_filtration_events(temp, dt_util.now(), threshold_idx=threshold_idx)
         return next_end
 
 

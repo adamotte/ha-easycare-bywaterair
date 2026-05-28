@@ -537,39 +537,50 @@ class FilterSchedule:
                     best_idx = i
         return best_idx
 
-    def active_bitmask_for_temp(self, temperature: float) -> int | None:
-        """Retourne le masque 24 bits actif pour une température donnée.
+    def active_bitmask_for_temp(
+        self, temperature: float, *, threshold_idx: int | None = None
+    ) -> int | None:
+        """Retourne le masque 24 bits actif pour un seuil donné.
 
+        Si `threshold_idx` est fourni, l'utilise directement (source BPC, stable).
+        Sinon, dérive l'index depuis `temperature` via `active_threshold_index_for_temp`.
         Utilise la première ligne de `sched` (toutes identiques en mode AUTO).
-        Retourne None si `sched` est absent ou le seuil hors limites.
+        Retourne None si `sched` est absent ou l'index hors limites.
         """
         if not self.sched:
             return None
-        idx = self.active_threshold_index_for_temp(temperature)
-        if idx is None:
+        if threshold_idx is None:
+            threshold_idx = self.active_threshold_index_for_temp(temperature)
+        if threshold_idx is None:
             return None
         row = self.sched[0]
-        if idx >= len(row):
+        if threshold_idx >= len(row):
             return None
-        return row[idx]
+        return row[threshold_idx]
 
-    def daily_hours_from_sched(self, temperature: float) -> float | None:
+    def daily_hours_from_sched(
+        self, temperature: float, *, threshold_idx: int | None = None
+    ) -> float | None:
         """Durée de filtration journalière en heures depuis le masque sched (popcount).
 
+        Si `threshold_idx` est fourni, l'utilise directement (source BPC, stable).
         Plus précis que le calcul dur/per : tient compte des plages horaires réelles.
         """
-        mask = self.active_bitmask_for_temp(temperature)
+        mask = self.active_bitmask_for_temp(temperature, threshold_idx=threshold_idx)
         if mask is None:
             return None
         return float(bin(mask).count("1"))
 
-    def filter_windows_from_sched(self, temperature: float) -> list[tuple[int, int]] | None:
+    def filter_windows_from_sched(
+        self, temperature: float, *, threshold_idx: int | None = None
+    ) -> list[tuple[int, int]] | None:
         """Retourne les créneaux actifs [(début_h, fin_h), ...] depuis le masque sched.
 
+        Si `threshold_idx` est fourni, l'utilise directement (source BPC, stable).
         fin_h est exclusive : (10, 16) = 10h→16h.
         Peut retourner plusieurs créneaux (ex. mode hors-gel : [(5, 7), (22, 23)]).
         """
-        mask = self.active_bitmask_for_temp(temperature)
+        mask = self.active_bitmask_for_temp(temperature, threshold_idx=threshold_idx)
         if mask is None:
             return None
         windows: list[tuple[int, int]] = []
@@ -586,13 +597,19 @@ class FilterSchedule:
             windows.append((start, 24))
         return windows
 
-    def active_rule_for_temp(self, ref_temp: float) -> CyclicRule | None:
-        """Retourne la règle cyclic active pour une température de référence (fallback).
+    def active_rule_for_temp(
+        self, ref_temp: float, *, threshold_idx: int | None = None
+    ) -> CyclicRule | None:
+        """Retourne la règle cyclic active (fallback si `sched` absent).
 
-        Algorithme : seuil plafond — règle avec le seuil le plus bas ≥ ref_temp.
-        Fallback sur le seuil le plus élevé si aucune règle ≥ ref_temp n'est trouvée.
-        À utiliser uniquement si `sched` est absent.
+        Si `threshold_idx` est fourni, recherche directement par index.
+        Sinon : seuil plafond (le plus bas ≥ ref_temp), fallback sur le plus élevé.
         """
+        if threshold_idx is not None:
+            for rule in self.rules:
+                if rule.threshold_index == threshold_idx:
+                    return rule
+            return None
         best: CyclicRule | None = None
         for rule in self.rules:
             if rule.threshold_temp is not None and rule.threshold_temp >= ref_temp:
@@ -607,7 +624,7 @@ class FilterSchedule:
         return best
 
     def next_filtration_events(
-        self, temperature: float, now: datetime
+        self, temperature: float, now: datetime, *, threshold_idx: int | None = None
     ) -> tuple[datetime | None, datetime | None]:
         """Retourne (prochain_démarrage, prochain_arrêt) selon l'heure actuelle.
 
@@ -620,13 +637,15 @@ class FilterSchedule:
               prochain_arrêt     = fin de cette prochaine plage
 
         Args:
-            temperature: température de l'eau en °C.
-            now        : datetime courant (timezone-aware recommandé).
+            temperature  : température de l'eau en °C (ignorée si threshold_idx fourni).
+            now          : datetime courant (timezone-aware recommandé).
+            threshold_idx: index direct dans `ths` (depuis BPCInput.temp_ref), prioritaire
+                           sur la déduction par température.
 
         Returns:
             Tuple (next_start, next_end). Les deux sont None si sched absent ou vide.
         """
-        windows = self.filter_windows_from_sched(temperature)
+        windows = self.filter_windows_from_sched(temperature, threshold_idx=threshold_idx)
         if not windows:
             return None, None
 
