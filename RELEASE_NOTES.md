@@ -1,10 +1,8 @@
-**Correction : plages de filtration décalées par rapport à l'app mobile**
+**Correction : plages de filtration incorrectes — suite (source de température)**
 
-Les capteurs `filtration_next_start`, `filtration_next_end` et `filtration_daily_duration` affichaient des plages horaires incorrectes (ex. 10h–16h au lieu de 9h–19h).
+La v1.0.4 corrigeait l'algorithme de sélection du seuil (plafond au lieu de plancher), mais utilisait la mauvaise température de référence car le champ `maxTemperatureTheDayBefore` est absent de l'API.
 
-**Cause :** l'algorithme de sélection du seuil de température utilisait un plancher (le seuil le plus bas ≤ température actuelle), alors que le BPC utilise un plafond (le seuil le plus bas ≥ température **maximale de la veille**, champ `maxTemperatureTheDayBefore`).
+**Correction v1.0.5 :**  
+Le champ `temperature` de la réponse status BPC (ex. `27`) est utilisé comme référence. Il correspond au seuil (en °C) que le BPC a committé au démarrage du cycle journalier. Avec ce champ, l'algorithme plafond donne le bon résultat (ex. 27°C → seuil 27°C → 9h–19h).
 
-**Correction :**
-- Algorithme mis à jour pour utiliser la logique plafond, conforme au reverse engineering de l'app mobile (méthode `getTemperatureThresholdIndexFrom`).
-- Le champ `maxTemperatureTheDayBefore` est désormais lu depuis la réponse de l'API BPC et exposé en attribut du capteur `filtration_daily_duration` (`max_temp_yesterday_c`).
-- En l'absence de ce champ dans la réponse API, la température courante de l'eau est utilisée comme fallback.
+Le capteur `filtration_daily_duration` expose désormais l'attribut `bpc_temp_reference_c` pour faciliter le débogage.

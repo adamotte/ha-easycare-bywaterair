@@ -76,8 +76,12 @@ class BPCData:
     pump_activation_reset_date   : date de remise à zéro du compteur pompe.
     filter_schedule              : planning cyclic de filtration (programme pompe index=0).
     max_temp_day_before          : température maximale de la veille (°C) fournie par le BPC.
-                                   Utilisée comme température de référence pour la sélection du
-                                   seuil de la matrice sched (algorithme plafond ≥).
+                                   Actuellement toujours None (champ absent de l'API).
+    bpc_temp_reference           : température de référence commitée par le BPC pour la journée.
+                                   Lue depuis le champ `temperature` de la réponse status BPC.
+                                   Correspond au seuil (°C entier) que le BPC a sélectionné
+                                   au démarrage du cycle (ex : 27 → seuil 27°C → 9h–19h).
+                                   Source primaire pour la sélection du seuil de filtration.
                                    None si absente de la réponse API.
     """
 
@@ -91,6 +95,7 @@ class BPCData:
     pump_activation_reset_date: datetime | None = None
     filter_schedule: FilterSchedule | None = None
     max_temp_day_before: float | None = None
+    bpc_temp_reference: int | None = None
 
     def get_input(self, index: int) -> BPCInput | None:
         """Retourne la voie BPC d'index donné, ou None si absente."""
@@ -269,8 +274,9 @@ class EasyCareBPCCoordinator(DataUpdateCoordinator[BPCData]):
         if watbox is None or bpc is None:
             raise UpdateFailed("BPC ou WATBOX absent de la liste des modules")
 
+        bpc_temp_reference: int | None = None
         try:
-            inputs = await self._client.get_bpc_status(watbox, bpc)
+            inputs, bpc_temp_reference = await self._client.get_bpc_status(watbox, bpc)
         except Exception as err:  # noqa: BLE001
             raise _wrap_api_error(err, "get_bpc_status") from err
 
@@ -314,8 +320,8 @@ class EasyCareBPCCoordinator(DataUpdateCoordinator[BPCData]):
             _LOGGER.debug("get_bpc_programs_data ignoré (non-fatal) : %s", err)
 
         _LOGGER.debug(
-            "BPC update OK : %d voie(s), mode=%s, adaptOffset=%d, maxTempYesterday=%s",
-            len(inputs), filtration_mode, adapt_offset, max_temp_day_before,
+            "BPC update OK : %d voie(s), mode=%s, adaptOffset=%d, bpc_temp_ref=%s°C",
+            len(inputs), filtration_mode, adapt_offset, bpc_temp_reference,
         )
         return BPCData(
             inputs=inputs,
@@ -328,6 +334,7 @@ class EasyCareBPCCoordinator(DataUpdateCoordinator[BPCData]):
             pump_activation_reset_date=pump_reset_date,
             filter_schedule=filter_schedule,
             max_temp_day_before=max_temp_day_before,
+            bpc_temp_reference=bpc_temp_reference,
         )
 
     def _should_skip_cycle(self) -> bool:

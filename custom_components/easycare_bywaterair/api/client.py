@@ -179,7 +179,9 @@ class EasyCareClient:
                 _LOGGER.warning("Module ignoré : %s", err)
         return tuple(modules)
 
-    async def get_bpc_status(self, watbox: Module, bpc: Module) -> tuple[BPCInput, ...]:
+    async def get_bpc_status(
+        self, watbox: Module, bpc: Module
+    ) -> tuple[tuple[BPCInput, ...], int | None]:
         """Récupère l'état des voies du BPC (pompe, lumières).
 
         Args:
@@ -187,7 +189,12 @@ class EasyCareClient:
             bpc   : module BPC.
 
         Returns:
-            Tuple des voies BPC triées par index croissant.
+            Tuple (inputs, bpc_temperature) :
+              inputs          : voies BPC triées par index croissant.
+              bpc_temperature : température de référence commitée par le BPC pour la journée
+                                (champ racine `temperature` de la réponse status), en °C entiers.
+                                Correspond au seuil de la matrice sched que le BPC a sélectionné
+                                au démarrage du cycle. None si absent de la réponse.
         """
         self._validate_module_type(watbox, MODULE_TYPE_WATBOX, "watbox")
         self._validate_module_type(bpc, MODULE_TYPE_BPC, "bpc")
@@ -199,6 +206,19 @@ class EasyCareClient:
             self._bpc_module_id = bpc.id
         self._watbox = watbox
         self._bpc = bpc
+
+        # Température de référence commitée par le BPC pour la journée en cours.
+        # Correspond au seuil (en °C) que le BPC a validé au démarrage du cycle matinal,
+        # déterminé à partir de la température max de la veille. Ex : 27 → seuil 27°C → 9h-19h.
+        bpc_temperature: int | None = None
+        raw_temp = data.get("temperature")
+        if raw_temp is not None:
+            try:
+                bpc_temperature = int(raw_temp)
+            except (TypeError, ValueError):
+                bpc_temperature = None
+        _LOGGER.debug("BPC status — temperature (ref seuil) : %s°C", bpc_temperature)
+
         pool_inputs = data.get("pool") or []
         inputs: list[BPCInput] = []
         for raw_input in pool_inputs:
@@ -207,7 +227,7 @@ class EasyCareClient:
             except EasyCareInvalidResponseError as err:
                 _LOGGER.warning("Voie BPC ignorée : %s", err)
         inputs.sort(key=lambda x: x.index)
-        return tuple(inputs)
+        return tuple(inputs), bpc_temperature
 
     async def get_pool_status(self) -> PoolStatus:
         """Récupère l'état complet de la filtration (mode, boost, compteurs)."""
@@ -243,6 +263,12 @@ class EasyCareClient:
             watbox_serial=self._watbox.serial_number, bpc_name=self._bpc.short_name,
         )
         data = await self._request("GET", API_HOST_EASYCARE, path)
+
+        # Log diagnostic : toutes les clés racine de la réponse (hors programs, trop verbeux).
+        _LOGGER.debug(
+            "BPC programmes — réponse racine : %s",
+            {k: v for k, v in data.items() if k != "programs"},
+        )
 
         # Température max de la veille — utilisée par le BPC pour choisir le seuil de filtration.
         max_temp_day_before: float | None = None

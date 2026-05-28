@@ -667,9 +667,13 @@ class EasyCareFiltrationDurationSensor(EasyCareBPCEntity[EasyCareBPCCoordinator]
     def _get_ref_temperature(self) -> float | None:
         """Température de référence pour la sélection du seuil de filtration.
 
-        Source primaire : maxTemperatureTheDayBefore depuis le BPC (température max de la veille).
-        Fallback : température courante de l'eau depuis l'AC1.
+        Source primaire : champ `temperature` du status BPC (seuil committé par le BPC
+                          au démarrage du cycle journalier, ex. 27°C → seuil index 6).
+        Fallback 1      : maxTemperatureTheDayBefore (actuellement absent de l'API).
+        Fallback 2      : température courante de l'eau depuis l'AC1.
         """
+        if self.coordinator.data is not None and self.coordinator.data.bpc_temp_reference is not None:
+            return float(self.coordinator.data.bpc_temp_reference)
         if self.coordinator.data is not None and self.coordinator.data.max_temp_day_before is not None:
             return self.coordinator.data.max_temp_day_before
         if self._user_coordinator.data is None:
@@ -709,8 +713,11 @@ class EasyCareFiltrationDurationSensor(EasyCareBPCEntity[EasyCareBPCCoordinator]
             else None
         )
 
+        bpc_temp_ref = self.coordinator.data.bpc_temp_reference
+
         attrs: dict[str, Any] = {
             "thresholds_c": list(schedule.thresholds),
+            "bpc_temp_reference_c": bpc_temp_ref,
             "max_temp_yesterday_c": max_temp_yesterday,
             "current_water_temp_c": current_temp,
         }
@@ -751,9 +758,13 @@ class _FiltrationScheduleSensorBase(EasyCareBPCEntity[EasyCareBPCCoordinator], S
     def _get_ref_temperature(self) -> float | None:
         """Température de référence pour la sélection du seuil de filtration.
 
-        Source primaire : maxTemperatureTheDayBefore depuis le BPC (température max de la veille).
-        Fallback : température courante de l'eau depuis l'AC1.
+        Source primaire : champ `temperature` du status BPC (seuil committé par le BPC
+                          au démarrage du cycle journalier, ex. 27°C → seuil index 6).
+        Fallback 1      : maxTemperatureTheDayBefore (actuellement absent de l'API).
+        Fallback 2      : température courante de l'eau depuis l'AC1.
         """
+        if self.coordinator.data is not None and self.coordinator.data.bpc_temp_reference is not None:
+            return float(self.coordinator.data.bpc_temp_reference)
         if self.coordinator.data is not None and self.coordinator.data.max_temp_day_before is not None:
             return self.coordinator.data.max_temp_day_before
         if self._user_coordinator.data is None:
