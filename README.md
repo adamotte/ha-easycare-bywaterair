@@ -31,7 +31,7 @@ Home Assistant integration for pools equipped with the
 - 🌡️ Water temperature, pH, chlorine (redox/ORP)
 - 🔋 AC1 analyser battery level
 - 📊 Filtration pressure (if LR-PR sensor is present)
-- 🔔 Notifications and active treatments
+- 🔔 **Pool action notifications** — translated alerts (calibration required, wintering, chlorine treatment…) with automatic HA persistent notification on new event
 - ⚙️ Current filtration mode and pump counters
 - ⚡ **Energy monitoring**: pump power (W) and cumulative energy (kWh) — compatible with the HA Energy Dashboard
 - 💡 **Light mode**: AUTO / MANUAL / OFF / PAUSE (with time slots and pause duration as attributes)
