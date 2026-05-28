@@ -1,6 +1,7 @@
 """Config flow pour Easy-care by Waterair.
 
-Étape unique : affichage du lien d'autorisation OAuth2 + saisie du code.
+Étape unique : saisie de l'email et du mot de passe Waterair. L'intégration
+gère silencieusement le flow OAuth2 Azure B2C (PKCE, redirection msauth://).
 Le reauth flow réutilise le même formulaire sans recréer le ConfigEntry.
 """
 
@@ -9,9 +10,9 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import aiohttp
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
+from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
@@ -20,12 +21,12 @@ from .api.client import EasyCareClient
 from .api.exceptions import (
     EasyCareConnectionError,
     EasyCareError,
-    EasyCareInvalidCodeError,
+    EasyCareInvalidCredentialsError,
     EasyCareInvalidResponseError,
+    EasyCareLoginError,
     EasyCareTimeoutError,
 )
 from .const import (
-    CONF_AUTH_CODE,
     CONF_BEARER,
     CONF_BEARER_EXPIRES_AT,
     CONF_ID_TOKEN,
@@ -39,12 +40,14 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 STEP_USER_DATA_SCHEMA = vol.Schema({
-    vol.Required(CONF_AUTH_CODE): str,
+    vol.Required(CONF_USERNAME): str,
+    vol.Required(CONF_PASSWORD): str,
     vol.Optional(CONF_POOL_ID, default=1): vol.All(vol.Coerce(int), vol.Range(min=1, max=10)),
 })
 
 STEP_REAUTH_DATA_SCHEMA = vol.Schema({
-    vol.Required(CONF_AUTH_CODE): str,
+    vol.Required(CONF_USERNAME): str,
+    vol.Required(CONF_PASSWORD): str,
 })
 
 
@@ -62,17 +65,11 @@ class EasyCareConfigFlow(ConfigFlow, domain=DOMAIN):
         return EasyCareOptionsFlow()
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        """Étape principale : affichage du lien OAuth2 + saisie du code."""
+        """Étape principale : saisie email/mot de passe."""
         errors: dict[str, str] = {}
         if user_input is not None:
             return await self._async_validate_and_create(user_input, errors)
-        authorize_url = EasyCareAuth.build_authorize_url()
-        return self.async_show_form(
-            step_id="user",
-            data_schema=STEP_USER_DATA_SCHEMA,
-            description_placeholders={"authorize_url": authorize_url, "authorize_url_raw": authorize_url},
-            errors=errors,
-        )
+        return self.async_show_form(step_id="user", data_schema=STEP_USER_DATA_SCHEMA)
 
     async def async_step_reauth(self, entry_data: dict[str, Any]) -> ConfigFlowResult:
         """Point d'entrée du reauth flow (appelé par HA automatiquement)."""
@@ -80,30 +77,25 @@ class EasyCareConfigFlow(ConfigFlow, domain=DOMAIN):
         return await self.async_step_reauth_confirm()
 
     async def async_step_reauth_confirm(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        """Étape de confirmation du reauth — l'utilisateur fournit un nouveau code."""
+        """Étape de confirmation du reauth — l'utilisateur fournit ses identifiants."""
         errors: dict[str, str] = {}
         if user_input is not None:
             assert self._reauth_entry is not None
             user_input[CONF_POOL_ID] = self._reauth_entry.data.get(CONF_POOL_ID, 1)
             return await self._async_validate_and_create(user_input, errors)
-        authorize_url = EasyCareAuth.build_authorize_url()
-        return self.async_show_form(
-            step_id="reauth_confirm",
-            data_schema=STEP_REAUTH_DATA_SCHEMA,
-            description_placeholders={"authorize_url": authorize_url, "authorize_url_raw": authorize_url},
-            errors=errors,
-        )
+        return self.async_show_form(step_id="reauth_confirm", data_schema=STEP_REAUTH_DATA_SCHEMA)
 
     async def _async_validate_and_create(
         self, user_input: dict[str, Any], errors: dict[str, str],
     ) -> ConfigFlowResult:
-        """Valide le code OAuth, échange contre tokens, et crée/met à jour l'entry."""
-        code = self._extract_code(user_input[CONF_AUTH_CODE].strip())
+        """Valide les identifiants via le flow OAuth2 Azure B2C et crée/met à jour l'entry."""
+        email = user_input[CONF_USERNAME].strip()
+        password = user_input[CONF_PASSWORD]
         pool_id = user_input.get(CONF_POOL_ID, 1)
         session = async_get_clientsession(self.hass)
         auth = EasyCareAuth(session=session)
         try:
-            tokens = await auth.exchange_code(code)
+            tokens = await auth.login_with_credentials(email, password)
             bearer = auth.bearer
             client = EasyCareClient(session, auth, pool_id=pool_id)
             try:
@@ -113,8 +105,11 @@ class EasyCareConfigFlow(ConfigFlow, domain=DOMAIN):
                     errors["base"] = "invalid_pool_id"
                     return self._show_form(errors)
                 raise
-        except EasyCareInvalidCodeError:
-            errors[CONF_AUTH_CODE] = "invalid_auth_code"
+        except EasyCareInvalidCredentialsError:
+            errors["base"] = "invalid_credentials"
+        except EasyCareLoginError:
+            _LOGGER.exception("Échec du flow de login Azure B2C")
+            errors["base"] = "login_failed"
         except EasyCareTimeoutError:
             errors["base"] = "timeout"
         except EasyCareConnectionError:
@@ -142,29 +137,13 @@ class EasyCareConfigFlow(ConfigFlow, domain=DOMAIN):
 
     def _show_form(self, errors: dict[str, str]) -> ConfigFlowResult:
         """Ré-affiche le bon formulaire avec les erreurs."""
-        authorize_url = EasyCareAuth.build_authorize_url()
-        placeholders = {"authorize_url": authorize_url, "authorize_url_raw": authorize_url}
         if self._reauth_entry is not None:
             return self.async_show_form(
-                step_id="reauth_confirm", data_schema=STEP_REAUTH_DATA_SCHEMA,
-                description_placeholders=placeholders, errors=errors,
+                step_id="reauth_confirm", data_schema=STEP_REAUTH_DATA_SCHEMA, errors=errors,
             )
         return self.async_show_form(
-            step_id="user", data_schema=STEP_USER_DATA_SCHEMA,
-            description_placeholders=placeholders, errors=errors,
+            step_id="user", data_schema=STEP_USER_DATA_SCHEMA, errors=errors,
         )
-
-    @staticmethod
-    def _extract_code(input_str: str) -> str:
-        """Extrait le code OAuth si l'utilisateur a collé une URL complète."""
-        input_str = input_str.strip()
-        if "code=" in input_str:
-            try:
-                after = input_str.split("code=", 1)[1]
-                return after.split("&", 1)[0].strip()
-            except IndexError:
-                pass
-        return input_str
 
 
 class EasyCareOptionsFlow(OptionsFlow):

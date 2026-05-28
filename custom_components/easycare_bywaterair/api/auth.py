@@ -14,8 +14,9 @@ import json
 import logging
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
+from html.parser import HTMLParser
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urljoin
 
 import aiohttp
 from aiohttp import ClientError, ClientResponseError
@@ -40,7 +41,9 @@ from .exceptions import (
     EasyCareAuthError,
     EasyCareConnectionError,
     EasyCareInvalidCodeError,
+    EasyCareInvalidCredentialsError,
     EasyCareInvalidResponseError,
+    EasyCareLoginError,
     EasyCareTimeoutError,
     EasyCareTokenExpiredError,
 )
@@ -49,6 +52,48 @@ from .models import BearerToken, OAuthTokens
 _LOGGER = logging.getLogger(__name__)
 
 TokensUpdatedCallback = Callable[[OAuthTokens, BearerToken], Awaitable[None]]
+
+# Mots-clés utilisés pour identifier le champ email dans le formulaire Azure B2C.
+# Couvre les id/name courants observés sur les pages de login Microsoft B2C.
+_EMAIL_FIELD_KEYWORDS: frozenset[str] = frozenset({
+    "email", "signin", "login", "username", "logonidentifier", "signinemail",
+})
+
+
+class _LoginFormParser(HTMLParser):
+    """Parser HTML minimaliste pour extraire les formulaires de la page de login Azure B2C.
+
+    Collecte tous les <form> avec leurs <input>, sans hypothèse sur la structure.
+    La sélection du bon formulaire (celui avec type="password") est faite en dehors.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.forms: list[dict[str, Any]] = []
+        self._current_form: dict[str, Any] | None = None
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attrs_dict: dict[str, str] = {k: (v or "") for k, v in attrs}
+        if tag == "form":
+            self._current_form = {
+                "action": attrs_dict.get("action", ""),
+                "method": attrs_dict.get("method", "post").lower(),
+                "inputs": [],
+            }
+        elif tag == "input" and self._current_form is not None:
+            self._current_form["inputs"].append(attrs_dict)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "form" and self._current_form is not None:
+            self.forms.append(self._current_form)
+            self._current_form = None
+
+    def find_password_form(self) -> dict[str, Any] | None:
+        """Retourne le premier formulaire contenant un champ type='password', ou None."""
+        for form in self.forms:
+            if any(inp.get("type", "").lower() == "password" for inp in form["inputs"]):
+                return form
+        return None
 
 
 class EasyCareAuth:
@@ -109,6 +154,248 @@ class EasyCareAuth:
             "response_mode": "query",
         }
         return f"{OAUTH_AUTHORIZE_URL}?{urlencode(params)}"
+
+    async def login_with_credentials(self, email: str, password: str) -> OAuthTokens:
+        """Authentifie silencieusement en simulant le flow browser Azure B2C.
+
+        L'utilisateur n'a pas à ouvrir de navigateur : la méthode charge la page
+        de login, soumet les identifiants et intercepte la redirection msauth://.
+        Le PKCE statique et l'exchange de code restent inchangés.
+
+        Args:
+            email   : adresse email du compte Waterair.
+            password: mot de passe du compte Waterair.
+
+        Returns:
+            Les tokens OAuth obtenus après login réussi.
+
+        Raises:
+            EasyCareInvalidCredentialsError: email ou mot de passe incorrect.
+            EasyCareLoginError: flow de login inattendu (MFA, CAPTCHA, page inconnue).
+            EasyCareConnectionError: erreur réseau.
+            EasyCareTimeoutError: timeout.
+        """
+        _LOGGER.debug("Début du login silencieux Azure B2C pour %s", email)
+        authorize_url = self.build_authorize_url()
+        html, page_url = await self._fetch_login_page(authorize_url)
+        form_action, payload = self._parse_and_build_payload(html, page_url, email, password)
+        redirect_url = await self._submit_credentials(form_action, payload, page_url)
+        code = self._extract_code_from_url(redirect_url)
+        return await self.exchange_code(code)
+
+    async def _fetch_login_page(self, authorize_url: str) -> tuple[str, str]:
+        """Charge la page de login Azure B2C en suivant les redirections HTTP normalement.
+
+        Returns:
+            Tuple (html, url_finale_après_redirections).
+        """
+        headers = {
+            "User-Agent": USER_AGENT,
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.8",
+        }
+        try:
+            async with self._session.get(
+                authorize_url,
+                headers=headers,
+                allow_redirects=True,
+                timeout=aiohttp.ClientTimeout(total=HTTP_TIMEOUT_AUTH),
+            ) as response:
+                if response.status != 200:
+                    raise EasyCareLoginError(
+                        f"Page de login Azure B2C inaccessible (HTTP {response.status})"
+                    )
+                html = await response.text()
+                return html, str(response.url)
+        except asyncio.TimeoutError as err:
+            raise EasyCareTimeoutError(
+                "Timeout lors du chargement de la page de login Azure B2C"
+            ) from err
+        except ClientError as err:
+            raise EasyCareConnectionError(
+                f"Erreur réseau lors du chargement de la page de login : {err}"
+            ) from err
+
+    @staticmethod
+    def _parse_and_build_payload(
+        html: str, page_url: str, email: str, password: str
+    ) -> tuple[str, dict[str, str]]:
+        """Parse le formulaire de login et construit le payload POST.
+
+        Stratégie robuste face aux changements de structure Azure B2C :
+        - Localise le formulaire par la présence d'un champ type="password"
+        - Extrait TOUS les champs cachés sans hypothèse sur leurs noms
+        - Identifie le champ email par type="email" ou id/name contenant des mots-clés connus
+        - Identifie le champ password par type="password"
+
+        Returns:
+            Tuple (url_action_du_formulaire, payload_complet).
+
+        Raises:
+            EasyCareLoginError: formulaire introuvable ou champs email/password manquants.
+        """
+        parser = _LoginFormParser()
+        parser.feed(html)
+        login_form = parser.find_password_form()
+
+        if login_form is None:
+            raise EasyCareLoginError(
+                "Formulaire de login introuvable dans la page Azure B2C "
+                "(MFA, CAPTCHA ou structure de page inattendue)"
+            )
+
+        form_action = login_form["action"]
+        if not form_action.startswith("http"):
+            form_action = urljoin(page_url, form_action)
+
+        payload: dict[str, str] = {}
+        email_field: str | None = None
+        password_field: str | None = None
+
+        for inp in login_form["inputs"]:
+            inp_type = inp.get("type", "text").lower()
+            inp_name = inp.get("name", "")
+            inp_id = inp.get("id", "").lower()
+            inp_value = inp.get("value", "")
+
+            if not inp_name:
+                continue
+
+            if inp_type == "hidden":
+                payload[inp_name] = inp_value
+            elif inp_type in ("email", "text") and email_field is None:
+                if inp_type == "email" or (
+                    any(k in inp_id for k in _EMAIL_FIELD_KEYWORDS)
+                    or any(k in inp_name.lower() for k in _EMAIL_FIELD_KEYWORDS)
+                ):
+                    email_field = inp_name
+            elif inp_type == "password" and password_field is None:
+                password_field = inp_name
+
+        if email_field is None:
+            raise EasyCareLoginError(
+                "Champ email introuvable dans le formulaire Azure B2C — "
+                "la structure de la page a peut-être changé"
+            )
+        if password_field is None:
+            raise EasyCareLoginError(
+                "Champ mot de passe introuvable dans le formulaire Azure B2C"
+            )
+
+        payload[email_field] = email
+        payload[password_field] = password
+        _LOGGER.debug(
+            "Formulaire de login parsé : action=%s, %d champs cachés, email=%s, password=%s",
+            form_action, len(payload) - 2, email_field, password_field,
+        )
+        return form_action, payload
+
+    async def _submit_credentials(
+        self, form_action: str, payload: dict[str, str], base_url: str, max_redirects: int = 10
+    ) -> str:
+        """Soumet le formulaire et suit les redirections jusqu'à intercepter msauth://.
+
+        Returns:
+            L'URL de redirection finale (msauth://... contenant le code OAuth).
+
+        Raises:
+            EasyCareInvalidCredentialsError: identifiants incorrects (serveur retourne
+                une page HTML avec le formulaire de login toujours présent).
+            EasyCareLoginError: flow inattendu (MFA, trop de redirections, etc.).
+        """
+        headers = {
+            "User-Agent": USER_AGENT,
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Referer": base_url,
+        }
+        current_url = form_action
+        current_data: dict[str, str] | None = payload
+        method = "POST"
+
+        for step in range(max_redirects):
+            try:
+                if method == "POST" and current_data is not None:
+                    resp_cm = self._session.post(
+                        current_url, data=current_data, headers=headers,
+                        allow_redirects=False,
+                        timeout=aiohttp.ClientTimeout(total=HTTP_TIMEOUT_AUTH),
+                    )
+                else:
+                    resp_cm = self._session.get(
+                        current_url, headers=headers,
+                        allow_redirects=False,
+                        timeout=aiohttp.ClientTimeout(total=HTTP_TIMEOUT_AUTH),
+                    )
+
+                async with resp_cm as response:
+                    if response.status in (301, 302, 303, 307, 308):
+                        location = response.headers.get("Location", "")
+                        if not location:
+                            raise EasyCareLoginError(
+                                "Redirection sans en-tête Location"
+                            )
+                        # Cible finale : URL msauth:// ou contenant le paramètre code=
+                        if location.startswith("msauth") or "code=" in location:
+                            _LOGGER.debug("Code OAuth intercepté à l'étape %d", step + 1)
+                            return location
+                        # Redirection HTTP ordinaire : résoudre et continuer
+                        if not location.startswith("http"):
+                            location = urljoin(current_url, location)
+                        current_url = location
+                        # 303 et 302/301 en POST → GET selon RFC 7231
+                        method = "GET" if response.status in (301, 302, 303) else method
+                        current_data = None
+
+                    elif response.status == 200:
+                        # Réponse HTML : soit credentials incorrects, soit étape inattendue
+                        html = await response.text()
+                        reparser = _LoginFormParser()
+                        reparser.feed(html)
+                        if reparser.find_password_form() is not None:
+                            raise EasyCareInvalidCredentialsError(
+                                "Email ou mot de passe incorrect"
+                            )
+                        raise EasyCareLoginError(
+                            "Étape de connexion inattendue (double authentification MFA ?) — "
+                            "vérifiez que votre compte Waterair n'a pas de 2FA activé"
+                        )
+
+                    else:
+                        raise EasyCareLoginError(
+                            f"Réponse inattendue à l'étape {step + 1} : HTTP {response.status}"
+                        )
+
+            except asyncio.TimeoutError as err:
+                raise EasyCareTimeoutError(
+                    "Timeout lors de la soumission des identifiants"
+                ) from err
+            except ClientError as err:
+                raise EasyCareConnectionError(
+                    f"Erreur réseau lors du login : {err}"
+                ) from err
+
+        raise EasyCareLoginError(
+            f"Trop de redirections pendant le login (max {max_redirects})"
+        )
+
+    @staticmethod
+    def _extract_code_from_url(redirect_url: str) -> str:
+        """Extrait le code OAuth depuis l'URL de redirection msauth://.
+
+        Raises:
+            EasyCareLoginError: paramètre code= absent de l'URL.
+        """
+        if "code=" not in redirect_url:
+            raise EasyCareLoginError(
+                f"Paramètre code= absent de l'URL de redirection : {redirect_url[:120]}"
+            )
+        try:
+            after = redirect_url.split("code=", 1)[1]
+            return after.split("&", 1)[0].strip()
+        except IndexError as err:
+            raise EasyCareLoginError(
+                f"Impossible d'extraire le code OAuth : {redirect_url[:120]}"
+            ) from err
 
     async def exchange_code(self, code: str) -> OAuthTokens:
         """Échange un code d'autorisation OAuth2 contre des tokens Azure.
