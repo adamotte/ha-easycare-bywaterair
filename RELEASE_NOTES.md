@@ -1,3 +1,11 @@
+**Notifications HA pour les actions piscine**
+
+Le sensor "Dernière notification" affiche désormais un libellé traduit (français et anglais) plutôt que la valeur brute de l'API (`shouldBeCalibrated`, `shouldBeWintered`, etc.).
+
+En complément, une notification persistante est créée automatiquement dans HA (visible sous la cloche) lorsqu'une nouvelle action piscine est détectée. Elle n'est créée qu'une seule fois par action — pas de doublon à chaque refresh. L'utilisateur peut la fermer ; elle ne réapparaîtra que si une action différente est signalée.
+
+---
+
 **Correction des plages de filtration (next_start / next_end / durée journalière)**
 
 Les capteurs `filtration_next_start`, `filtration_next_end` et `filtration_daily_duration` affichent maintenant les bonnes valeurs, stables toute la journée, et cohérentes avec l'application mobile Waterair.
