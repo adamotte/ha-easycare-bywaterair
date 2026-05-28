@@ -59,6 +59,7 @@ class EasyCareBPCFirmwareUpdateEntity(
     """Mise à jour logicielle du module BPC."""
 
     _attr_translation_key = "bpc_firmware"
+    _attr_icon = "mdi:package-up"
 
     def __init__(self, coordinator: EasyCareModulesCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator, entry, unique_id_suffix="bpc_firmware_update")
@@ -91,6 +92,7 @@ class EasyCareAC1FirmwareUpdateEntity(
     """Mise à jour logicielle du module AC1."""
 
     _attr_translation_key = "ac1_firmware"
+    _attr_icon = "mdi:package-up"
 
     def __init__(self, coordinator: EasyCareModulesCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator, entry, unique_id_suffix="ac1_firmware_update")
