@@ -83,7 +83,14 @@ class EasyCareConfigFlow(ConfigFlow, domain=DOMAIN):
             assert self._reauth_entry is not None
             user_input[CONF_POOL_ID] = self._reauth_entry.data.get(CONF_POOL_ID, 1)
             return await self._async_validate_and_create(user_input, errors)
-        return self.async_show_form(step_id="reauth_confirm", data_schema=STEP_REAUTH_DATA_SCHEMA)
+        suggested: dict[str, str] = {}
+        if self._reauth_entry is not None:
+            suggested[CONF_USERNAME] = self._reauth_entry.data.get(CONF_USERNAME, "")
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            data_schema=STEP_REAUTH_DATA_SCHEMA,
+            suggested_values=suggested,
+        )
 
     async def _async_validate_and_create(
         self, user_input: dict[str, Any], errors: dict[str, str],
@@ -119,6 +126,7 @@ class EasyCareConfigFlow(ConfigFlow, domain=DOMAIN):
             errors["base"] = "unknown"
         else:
             data_to_save = {
+                CONF_USERNAME: email,
                 CONF_REFRESH_TOKEN: tokens.refresh_token,
                 CONF_ID_TOKEN: tokens.id_token,
                 CONF_ID_TOKEN_EXPIRES_AT: tokens.expires_at,
