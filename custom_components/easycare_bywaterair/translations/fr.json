@@ -101,14 +101,14 @@
       "notification": {
         "name": "Dernière notification",
         "state": {
-          "None": "Aucune notification active",
-          "shouldBeCalibrated": "Calibration AC1 requise",
-          "shouldBeWintered": "Hivernage de la piscine requis",
-          "shouldBePutBackIntoOperation": "Remise en service de la piscine requise",
-          "shouldDoChlorineTreatment": "Traitement chlore recommandé",
-          "pHCanShouldBeReplaced": "Bidon pH à remplacer",
-          "pHCalibrationNecessary": "Calibration pH requise",
-          "severalInsufficientFillings": "Plusieurs remplissages insuffisants"
+          "none": "Aucune notification active",
+          "should_be_calibrated": "Calibration AC1 requise",
+          "should_be_wintered": "Hivernage de la piscine requis",
+          "should_be_put_back_into_operation": "Remise en service de la piscine requise",
+          "should_do_chlorine_treatment": "Traitement chlore recommandé",
+          "ph_can_should_be_replaced": "Bidon pH à remplacer",
+          "ph_calibration_necessary": "Calibration pH requise",
+          "several_insufficient_fillings": "Plusieurs remplissages insuffisants"
         }
       },
       "treatment": {"name": "Traitement actif"},

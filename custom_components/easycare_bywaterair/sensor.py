@@ -84,6 +84,18 @@ from .entity import (
 
 _LOGGER = logging.getLogger(__name__)
 
+# Mapping valeurs brutes API → clés de traduction HA (snake_case, [a-z0-9_]+)
+_NOTIFICATION_ACTION_TO_KEY: dict[str, str] = {
+    "None": "none",
+    "shouldBeCalibrated": "should_be_calibrated",
+    "shouldBeWintered": "should_be_wintered",
+    "shouldBePutBackIntoOperation": "should_be_put_back_into_operation",
+    "shouldDoChlorineTreatment": "should_do_chlorine_treatment",
+    "pHCanShouldBeReplaced": "ph_can_should_be_replaced",
+    "pHCalibrationNecessary": "ph_calibration_necessary",
+    "severalInsufficientFillings": "several_insufficient_fillings",
+}
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -238,7 +250,8 @@ class EasyCareNotificationSensor(EasyCareAC1Entity[EasyCareUserCoordinator], Sen
     def native_value(self) -> str | None:
         if self.coordinator.data is None:
             return None
-        return self.coordinator.data.alerts.latest_action
+        raw = self.coordinator.data.alerts.latest_action
+        return _NOTIFICATION_ACTION_TO_KEY.get(raw, raw)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:

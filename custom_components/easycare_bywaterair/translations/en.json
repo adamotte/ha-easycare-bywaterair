@@ -101,14 +101,14 @@
       "notification": {
         "name": "Last notification",
         "state": {
-          "None": "No active notification",
-          "shouldBeCalibrated": "AC1 calibration required",
-          "shouldBeWintered": "Pool wintering required",
-          "shouldBePutBackIntoOperation": "Pool restart required",
-          "shouldDoChlorineTreatment": "Chlorine treatment recommended",
-          "pHCanShouldBeReplaced": "pH container to replace",
-          "pHCalibrationNecessary": "pH calibration required",
-          "severalInsufficientFillings": "Several insufficient fillings"
+          "none": "No active notification",
+          "should_be_calibrated": "AC1 calibration required",
+          "should_be_wintered": "Pool wintering required",
+          "should_be_put_back_into_operation": "Pool restart required",
+          "should_do_chlorine_treatment": "Chlorine treatment recommended",
+          "ph_can_should_be_replaced": "pH container to replace",
+          "ph_calibration_necessary": "pH calibration required",
+          "several_insufficient_fillings": "Several insufficient fillings"
         }
       },
       "treatment": {"name": "Active treatment"},
