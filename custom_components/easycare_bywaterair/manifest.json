@@ -10,7 +10,8 @@
   "issue_tracker": "https://github.com/adamotte/ha-easycare-bywaterair/issues",
   "quality_scale": "silver",
   "requirements": [
-    "aiohttp>=3.9.0"
+    "aiohttp>=3.9.0",
+    "curl_cffi>=0.7.0"
   ],
   "version": "1.1.2"
 }
