@@ -1,9 +1,11 @@
 # easy·care by Waterair — Home Assistant Integration
 
 [![Release](https://img.shields.io/github/v/release/adamotte/ha-easycare-bywaterair?style=flat-square)](https://github.com/adamotte/ha-easycare-bywaterair/releases)
-[![HACS](https://img.shields.io/badge/HACS-Custom-orange.svg?style=flat-square)](https://hacs.xyz)
+[![HACS](https://img.shields.io/badge/HACS-Default-41BDF5.svg?style=flat-square)](https://github.com/hacs/integration)
 [![License](https://img.shields.io/github/license/adamotte/ha-easycare-bywaterair?style=flat-square)](LICENSE)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-%3E%3D2024.1-blue?style=flat-square&logo=home-assistant)](https://www.home-assistant.io)
+[![Validate](https://github.com/adamotte/ha-easycare-bywaterair/actions/workflows/validate.yml/badge.svg)](https://github.com/adamotte/ha-easycare-bywaterair/actions/workflows/validate.yml)
+[![hassfest](https://github.com/adamotte/ha-easycare-bywaterair/actions/workflows/hassfest.yml/badge.svg)](https://github.com/adamotte/ha-easycare-bywaterair/actions/workflows/hassfest.yml)
 [![Last commit](https://img.shields.io/github/last-commit/adamotte/ha-easycare-bywaterair/main?style=flat-square)](https://github.com/adamotte/ha-easycare-bywaterair/commits/main)
 [![Issues](https://img.shields.io/github/issues/adamotte/ha-easycare-bywaterair?style=flat-square)](https://github.com/adamotte/ha-easycare-bywaterair/issues)
 [![Stars](https://img.shields.io/github/stars/adamotte/ha-easycare-bywaterair?style=flat-square)](https://github.com/adamotte/ha-easycare-bywaterair/stargazers)
@@ -25,6 +27,7 @@ Home Assistant integration for pools equipped with the
 - ⚡ **Energy monitoring**: pump power (W) and cumulative energy (kWh) — compatible with the HA Energy Dashboard
 - 💡 **Light mode**: AUTO / MANUAL / OFF / PAUSE (with time slots and pause duration as attributes)
 - 🕐 **Filtration schedule** — daily duration, next start and next stop derived from the BPC programme (temperature-aware)
+- 🔄 **Software update notifications** — detects available firmware updates for BPC and AC1, exposed as native HA update entities (visible in Settings → Updates)
 
 ### Control
 - 💡 **Lights**: spotlight (spot) and step lighting (escalight) — MANUAL on (1h to 6h max)
@@ -37,15 +40,19 @@ Home Assistant integration for pools equipped with the
 - 📱 **UI-based configuration** (no YAML)
 - 🌐 **Multi-language** (French, English)
 - 🧩 **6 HA services** callable from automations
+- 🔔 **Native update notifications** — HA badge when BPC or AC1 has a software update available
 - 🏠 **Properly modelled devices**: WATBOX → BPC, AC1, LR-PR
 
 ## 📦 Installation
 
 ### Via HACS (recommended)
-1. In HACS → Integrations → menu (⋮) → Custom repositories
-2. Add this repository URL as type "Integration"
-3. Install "easy·care by Waterair"
-4. Restart Home Assistant
+
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=adamotte&repository=ha-easycare-bywaterair&category=integration)
+
+Click the button above, or manually:
+1. In HACS → Integrations, search for **"easy·care by Waterair"**
+2. Click **Download**
+3. Restart Home Assistant
 
 ### Manual
 Copy the `custom_components/easycare_bywaterair` folder into the `custom_components`

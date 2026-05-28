@@ -130,6 +130,10 @@
       "filtration_daily_duration": {"name": "Filtration duration (daily)"},
       "filtration_next_start": {"name": "Next filtration start"},
       "filtration_next_end": {"name": "Next filtration end"}
+    },
+    "update": {
+      "bpc_firmware": {"name": "Software update"},
+      "ac1_firmware": {"name": "Software update"}
     }
   },
   "services": {

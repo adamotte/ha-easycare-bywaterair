@@ -337,6 +337,9 @@ class Module:
     static_pressure: float = 0.0
     outputs: tuple[ModuleOutput, ...] = ()
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
+    software_version: str | None = None
+    hardware_version: str | None = None
+    firmware_available: dict[str, Any] = field(default_factory=dict, repr=False)
 
     @property
     def short_name(self) -> str:
@@ -380,6 +383,8 @@ class Module:
             number_of_inputs=int(data.get("numberOfInputs", 0) or 0),
             battery_level=battery, image=data.get("customPhoto", ""),
             static_pressure=static_pressure, outputs=outputs, raw=data,
+            software_version=data.get("softwareVersion"),
+            hardware_version=data.get("hardwareVersion"),
         )
 
 

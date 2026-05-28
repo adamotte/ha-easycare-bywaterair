@@ -60,6 +60,7 @@ PLATFORMS: Final = [
     Platform.NUMBER,
     Platform.SELECT,
     Platform.SENSOR,
+    Platform.UPDATE,
 ]
 
 SERVICE_PUMP_ON_SCHEMA = vol.Schema({

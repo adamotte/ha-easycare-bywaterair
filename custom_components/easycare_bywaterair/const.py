@@ -28,6 +28,7 @@ API_PATH_REPORT_MANUAL_SENT: Final = "/api/reportManualCommandSent"
 API_PATH_GET_POOL_STATUS: Final = "/api/getPoolStatus"
 API_PATH_SET_STATUS_COMMAND: Final = "/api/setStatusCommandToSend"
 API_PATH_BPC_PROGRAMS: Final = "/api/module/{watbox_serial}/programs/{bpc_name}"
+API_PATH_FIRMWARE: Final = "/api/module/{watbox_serial}/firmware/{module_name}"
 
 SSO_HOST: Final = "https://sso.waterair.com"
 SSO_TENANT: Final = "waterairexternb2c.onmicrosoft.com"

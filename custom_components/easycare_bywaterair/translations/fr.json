@@ -128,6 +128,10 @@
       "filtration_daily_duration": {"name": "Durée de filtration (journalière)"},
       "filtration_next_start": {"name": "Prochain démarrage filtration"},
       "filtration_next_end": {"name": "Prochain arrêt filtration"}
+    },
+    "update": {
+      "bpc_firmware": {"name": "Mise à jour logicielle"},
+      "ac1_firmware": {"name": "Mise à jour logicielle"}
     }
   },
   "services": {

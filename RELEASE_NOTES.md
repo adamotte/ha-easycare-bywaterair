@@ -1,8 +1,8 @@
-**Correction : plages de filtration incorrectes — suite (source de température)**
+**Nouvelles entités : mise à jour logicielle BPC et AC1**
 
-La v1.0.4 corrigeait l'algorithme de sélection du seuil (plafond au lieu de plancher), mais utilisait la mauvaise température de référence car le champ `maxTemperatureTheDayBefore` est absent de l'API.
+L'intégration détecte désormais les mises à jour logicielles disponibles pour les modules BPC et AC1 et les expose nativement dans Home Assistant via la plateforme `update`.
 
-**Correction v1.0.5 :**  
-Le champ `temperature` de la réponse status BPC (ex. `27`) est utilisé comme référence. Il correspond au seuil (en °C) que le BPC a committé au démarrage du cycle journalier. Avec ce champ, l'algorithme plafond donne le bon résultat (ex. 27°C → seuil 27°C → 9h–19h).
-
-Le capteur `filtration_daily_duration` expose désormais l'attribut `bpc_temp_reference_c` pour faciliter le débogage.
+**Ce que ça apporte :**
+- Deux nouvelles entités *Mise à jour* apparaissent dans HA (une par module présent) — visibles dans **Paramètres → Mises à jour** avec un badge de notification
+- La version installée (lue depuis les données du module) et la version disponible (interrogée toutes les 24 h via l'API Waterair) sont exposées comme attributs d'état
+- Aucune installation depuis HA — la mise à jour s'effectue toujours via l'app mobile Waterair (Bluetooth). L'entité sert uniquement à notifier qu'une mise à jour est disponible

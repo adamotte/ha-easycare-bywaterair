@@ -27,6 +27,7 @@ from ..const import (
     API_PATH_BPC_MANUAL,
     API_PATH_BPC_PROGRAMS,
     API_PATH_BPC_STATUS,
+    API_PATH_FIRMWARE,
     API_PATH_GET_POOL_STATUS,
     API_PATH_GET_USER,
     API_PATH_GET_USER_MODULES,
@@ -228,6 +229,17 @@ class EasyCareClient:
                 _LOGGER.warning("Voie BPC ignorée : %s", err)
         inputs.sort(key=lambda x: x.index)
         return tuple(inputs), bpc_temperature
+
+    async def get_firmware_update(self, watbox_serial: str, module_short_name: str) -> dict[str, Any]:
+        """Vérifie si une mise à jour firmware est disponible pour un module.
+
+        Returns:
+            Dict vide si aucune mise à jour, sinon AvailableDeviceVersion JSON.
+        """
+        path = API_PATH_FIRMWARE.format(
+            watbox_serial=watbox_serial, module_name=module_short_name,
+        )
+        return await self._request("GET", API_HOST_EASYCARE, path)
 
     async def get_pool_status(self) -> PoolStatus:
         """Récupère l'état complet de la filtration (mode, boost, compteurs)."""

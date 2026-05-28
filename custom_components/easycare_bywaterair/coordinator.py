@@ -9,6 +9,7 @@ Trois coordinators avec des fréquences de polling adaptées :
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -41,6 +42,7 @@ from .api.models import (
 )
 from .const import (
     DOMAIN,
+    MODULE_TYPE_AC1,
     MODULE_TYPE_BPC,
     MODULE_TYPE_WATBOX,
     SCAN_INTERVAL_BPC,
@@ -190,13 +192,37 @@ class EasyCareModulesCoordinator(DataUpdateCoordinator[tuple[Module, ...]]):
         self._client = client
 
     async def _async_update_data(self) -> tuple[Module, ...]:
-        """Récupère la liste des modules."""
+        """Récupère la liste des modules et enrichit avec les données firmware."""
         try:
             modules = await self._client.get_modules()
         except Exception as err:  # noqa: BLE001
             raise _wrap_api_error(err, "get_modules") from err
-        _LOGGER.debug("Modules update OK : %d module(s)", len(modules))
-        return modules
+
+        watbox = next((m for m in modules if m.type == MODULE_TYPE_WATBOX), None)
+        if watbox is None:
+            _LOGGER.debug("Modules update OK : %d module(s), pas de WATBOX pour check firmware", len(modules))
+            return modules
+
+        enriched: list[Module] = []
+        for module in modules:
+            if module.type in (MODULE_TYPE_BPC, MODULE_TYPE_AC1):
+                try:
+                    fw_data = await self._client.get_firmware_update(
+                        watbox.serial_number, module.short_name
+                    )
+                    if fw_data:
+                        module = dataclasses.replace(module, firmware_available=fw_data)
+                        _LOGGER.debug(
+                            "Firmware check %s : mise à jour disponible → %s", module.name, fw_data
+                        )
+                    else:
+                        _LOGGER.debug("Firmware check %s : à jour", module.name)
+                except Exception as err:  # noqa: BLE001
+                    _LOGGER.warning("Firmware check %s ignoré : %s", module.name, err)
+            enriched.append(module)
+
+        _LOGGER.debug("Modules update OK : %d module(s)", len(enriched))
+        return tuple(enriched)
 
     def get_watbox(self) -> Module | None:
         """Retourne le module WATBOX, ou None si absent."""
