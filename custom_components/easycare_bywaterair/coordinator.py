@@ -75,6 +75,10 @@ class BPCData:
     pump_total_activation_minutes: durée cumulée de la pompe en minutes (depuis reset_date).
     pump_activation_reset_date   : date de remise à zéro du compteur pompe.
     filter_schedule              : planning cyclic de filtration (programme pompe index=0).
+    max_temp_day_before          : température maximale de la veille (°C) fournie par le BPC.
+                                   Utilisée comme température de référence pour la sélection du
+                                   seuil de la matrice sched (algorithme plafond ≥).
+                                   None si absente de la réponse API.
     """
 
     inputs: tuple[BPCInput, ...]
@@ -86,6 +90,7 @@ class BPCData:
     pump_total_activation_minutes: int | None = None
     pump_activation_reset_date: datetime | None = None
     filter_schedule: FilterSchedule | None = None
+    max_temp_day_before: float | None = None
 
     def get_input(self, index: int) -> BPCInput | None:
         """Retourne la voie BPC d'index donné, ou None si absente."""
@@ -295,16 +300,22 @@ class EasyCareBPCCoordinator(DataUpdateCoordinator[BPCData]):
         spot_program: dict | None = None
         escalight_program: dict | None = None
         filter_schedule: FilterSchedule | None = None
+        max_temp_day_before: float | None = None
         try:
-            filtration_mode, adapt_offset, spot_program, escalight_program, filter_schedule = (
-                await self._client.get_bpc_programs_data()
-            )
+            (
+                filtration_mode,
+                adapt_offset,
+                spot_program,
+                escalight_program,
+                filter_schedule,
+                max_temp_day_before,
+            ) = await self._client.get_bpc_programs_data()
         except Exception as err:  # noqa: BLE001
             _LOGGER.debug("get_bpc_programs_data ignoré (non-fatal) : %s", err)
 
         _LOGGER.debug(
-            "BPC update OK : %d voie(s), mode=%s, adaptOffset=%d",
-            len(inputs), filtration_mode, adapt_offset,
+            "BPC update OK : %d voie(s), mode=%s, adaptOffset=%d, maxTempYesterday=%s",
+            len(inputs), filtration_mode, adapt_offset, max_temp_day_before,
         )
         return BPCData(
             inputs=inputs,
@@ -316,6 +327,7 @@ class EasyCareBPCCoordinator(DataUpdateCoordinator[BPCData]):
             pump_total_activation_minutes=pump_total_minutes,
             pump_activation_reset_date=pump_reset_date,
             filter_schedule=filter_schedule,
+            max_temp_day_before=max_temp_day_before,
         )
 
     def _should_skip_cycle(self) -> bool:

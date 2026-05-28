@@ -219,7 +219,7 @@ class EasyCareClient:
 
     async def get_bpc_programs_data(
         self,
-    ) -> tuple[str | None, int, dict | None, dict | None, FilterSchedule | None]:
+    ) -> tuple[str | None, int, dict | None, dict | None, FilterSchedule | None, float | None]:
         """Lit les programmes BPC pour la pompe et les lumières.
 
         Pompe (index 0) — mode de filtration, adaptOffset et planning de filtration :
@@ -231,15 +231,29 @@ class EasyCareClient:
         brut retourné tel quel pour un parsing défensif côté coordinator.
 
         Returns:
-            Tuple (filtration_mode, adapt_offset, spot_program, escalight_program, filter_schedule).
+            Tuple (filtration_mode, adapt_offset, spot_program, escalight_program,
+                   filter_schedule, max_temp_day_before).
             filtration_mode est None si les modules ne sont pas disponibles.
+            max_temp_day_before : température maximale de la veille (°C) utilisée par le BPC
+            pour sélectionner le seuil de la matrice sched. None si absente de la réponse.
         """
         if self._watbox is None or self._bpc is None:
-            return None, 0, None, None, None
+            return None, 0, None, None, None, None
         path = API_PATH_BPC_PROGRAMS.format(
             watbox_serial=self._watbox.serial_number, bpc_name=self._bpc.short_name,
         )
         data = await self._request("GET", API_HOST_EASYCARE, path)
+
+        # Température max de la veille — utilisée par le BPC pour choisir le seuil de filtration.
+        max_temp_day_before: float | None = None
+        raw_max_temp = data.get("maxTemperatureTheDayBefore")
+        if raw_max_temp is not None:
+            try:
+                max_temp_day_before = float(raw_max_temp)
+            except (TypeError, ValueError):
+                max_temp_day_before = None
+        _LOGGER.debug("BPC programmes — maxTemperatureTheDayBefore : %s", max_temp_day_before)
+
         programs = data.get("programs") or []
 
         filtration_mode: str | None = None
@@ -299,7 +313,7 @@ class EasyCareClient:
                 escalight_program = dict(charac)
                 _LOGGER.debug("BPC programmes — escalight (index 2) programCharacteristics : %s", charac)
 
-        return filtration_mode, adapt_offset, spot_program, escalight_program, filter_schedule
+        return filtration_mode, adapt_offset, spot_program, escalight_program, filter_schedule, max_temp_day_before
 
     async def set_bpc_manual(
         self,

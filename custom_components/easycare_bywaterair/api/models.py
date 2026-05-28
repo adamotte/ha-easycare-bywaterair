@@ -503,16 +503,30 @@ class FilterSchedule:
 
         return cls(thresholds=ths, sched=parsed_sched, rules=tuple(rules))
 
-    def active_threshold_index_for_temp(self, temperature: float) -> int | None:
-        """Retourne l'index du seuil actif dans `thresholds` pour une température donnée.
+    def active_threshold_index_for_temp(self, ref_temp: float) -> int | None:
+        """Retourne l'index du seuil actif dans `thresholds` pour une température de référence.
 
-        Sélectionne le seuil le plus élevé parmi ceux ≤ température.
+        Algorithme : seuil plafond — seuil le plus bas parmi ceux ≥ ref_temp.
+        Correspond à l'algorithme du BPC (getTemperatureThresholdIndexFrom) qui utilise
+        la température maximale de la veille (maxTemperatureTheDayBefore).
         Exclut la valeur sentinelle 127.
+        Si ref_temp dépasse tous les seuils réels, retourne l'index du seuil le plus élevé.
         """
         best_idx: int | None = None
         best_temp: int | None = None
+        # Seuil plafond : le plus bas ≥ ref_temp (hors sentinelle 127)
         for i, th in enumerate(self.thresholds):
-            if th != 127 and th <= temperature:
+            if th == 127:
+                continue
+            if th >= ref_temp:
+                if best_temp is None or th < best_temp:
+                    best_temp = th
+                    best_idx = i
+        # Fallback : ref_temp au-dessus de tous les seuils réels → seuil le plus élevé
+        if best_idx is None:
+            for i, th in enumerate(self.thresholds):
+                if th == 127:
+                    continue
                 if best_temp is None or th > best_temp:
                     best_temp = th
                     best_idx = i
@@ -567,16 +581,24 @@ class FilterSchedule:
             windows.append((start, 24))
         return windows
 
-    def active_rule_for_temp(self, temperature: float) -> CyclicRule | None:
-        """Retourne la règle cyclic active pour une température donnée (fallback).
+    def active_rule_for_temp(self, ref_temp: float) -> CyclicRule | None:
+        """Retourne la règle cyclic active pour une température de référence (fallback).
 
+        Algorithme : seuil plafond — règle avec le seuil le plus bas ≥ ref_temp.
+        Fallback sur le seuil le plus élevé si aucune règle ≥ ref_temp n'est trouvée.
         À utiliser uniquement si `sched` est absent.
         """
         best: CyclicRule | None = None
         for rule in self.rules:
-            if rule.threshold_temp is not None and rule.threshold_temp <= temperature:
-                if best is None or rule.threshold_temp > (best.threshold_temp or 0):
+            if rule.threshold_temp is not None and rule.threshold_temp >= ref_temp:
+                if best is None or rule.threshold_temp < (best.threshold_temp or float("inf")):
                     best = rule
+        # Fallback : si aucune règle ≥ ref_temp, prendre la règle avec le seuil le plus élevé
+        if best is None:
+            for rule in self.rules:
+                if rule.threshold_temp is not None:
+                    if best is None or rule.threshold_temp > (best.threshold_temp or 0):
+                        best = rule
         return best
 
     def next_filtration_events(

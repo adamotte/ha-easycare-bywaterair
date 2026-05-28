@@ -641,10 +641,11 @@ class EasyCareDetailSensor(EasyCareWATBOXEntity[EasyCareUserCoordinator], Sensor
 class EasyCareFiltrationDurationSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], SensorEntity):
     """Durée de filtration journalière depuis les masques horaires BPC (sched).
 
-    Calcul par popcount du masque 24 bits actif pour la température courante.
+    Calcul par popcount du masque 24 bits actif pour la température de référence.
     Fallback sur le ratio dur/per (cyclic) si sched est absent.
-    La température est lue en snapshot depuis EasyCareUserCoordinator.
-    Retourne None (unavailable) si la température n'est pas disponible.
+    La température de référence est lue depuis maxTemperatureTheDayBefore (BPC),
+    avec fallback sur la température courante AC1.
+    Retourne None (unavailable) si aucune température n'est disponible.
     """
 
     _attr_translation_key = "filtration_daily_duration"
@@ -663,8 +664,14 @@ class EasyCareFiltrationDurationSensor(EasyCareBPCEntity[EasyCareBPCCoordinator]
         super().__init__(coordinator, entry, unique_id_suffix="filtration_daily_duration")
         self._user_coordinator = user_coordinator
 
-    def _get_temperature(self) -> float | None:
-        """Lecture snapshot de la température AC1 (pas d'abonnement au coordinateur user)."""
+    def _get_ref_temperature(self) -> float | None:
+        """Température de référence pour la sélection du seuil de filtration.
+
+        Source primaire : maxTemperatureTheDayBefore depuis le BPC (température max de la veille).
+        Fallback : température courante de l'eau depuis l'AC1.
+        """
+        if self.coordinator.data is not None and self.coordinator.data.max_temp_day_before is not None:
+            return self.coordinator.data.max_temp_day_before
         if self._user_coordinator.data is None:
             return None
         return self._user_coordinator.data.metrics.temperature_value
@@ -676,15 +683,15 @@ class EasyCareFiltrationDurationSensor(EasyCareBPCEntity[EasyCareBPCCoordinator]
         schedule = self.coordinator.data.filter_schedule
         if schedule is None:
             return None
-        temperature = self._get_temperature()
-        if temperature is None:
+        ref_temp = self._get_ref_temperature()
+        if ref_temp is None:
             return None
         # Source primaire : masque sched (popcount) — précis à l'heure près
-        hours = schedule.daily_hours_from_sched(temperature)
+        hours = schedule.daily_hours_from_sched(ref_temp)
         if hours is not None:
             return hours
         # Fallback : ratio dur/per depuis les règles cyclic
-        rule = schedule.active_rule_for_temp(temperature)
+        rule = schedule.active_rule_for_temp(ref_temp)
         return rule.daily_hours if rule is not None else None
 
     @property
@@ -694,16 +701,26 @@ class EasyCareFiltrationDurationSensor(EasyCareBPCEntity[EasyCareBPCCoordinator]
         schedule = self.coordinator.data.filter_schedule
         if schedule is None:
             return {}
-        temperature = self._get_temperature()
+        ref_temp = self._get_ref_temperature()
+        max_temp_yesterday = self.coordinator.data.max_temp_day_before
+        current_temp = (
+            self._user_coordinator.data.metrics.temperature_value
+            if self._user_coordinator.data is not None
+            else None
+        )
 
-        attrs: dict[str, Any] = {"thresholds_c": list(schedule.thresholds)}
+        attrs: dict[str, Any] = {
+            "thresholds_c": list(schedule.thresholds),
+            "max_temp_yesterday_c": max_temp_yesterday,
+            "current_water_temp_c": current_temp,
+        }
 
-        if temperature is not None:
-            idx = schedule.active_threshold_index_for_temp(temperature)
+        if ref_temp is not None:
+            idx = schedule.active_threshold_index_for_temp(ref_temp)
             attrs["active_threshold_temp_c"] = (
                 schedule.thresholds[idx] if idx is not None else None
             )
-            windows = schedule.filter_windows_from_sched(temperature)
+            windows = schedule.filter_windows_from_sched(ref_temp)
             if windows is not None:
                 attrs["filter_windows"] = [
                     {"start_h": s, "end_h": e} for s, e in windows
@@ -717,7 +734,7 @@ class EasyCareFiltrationDurationSensor(EasyCareBPCEntity[EasyCareBPCCoordinator]
 class _FiltrationScheduleSensorBase(EasyCareBPCEntity[EasyCareBPCCoordinator], SensorEntity):
     """Classe de base pour les sensors de planning de filtration.
 
-    Partage la logique d'accès au FilterSchedule et à la température.
+    Partage la logique d'accès au FilterSchedule et à la température de référence.
     """
 
     def __init__(
@@ -731,8 +748,14 @@ class _FiltrationScheduleSensorBase(EasyCareBPCEntity[EasyCareBPCCoordinator], S
         super().__init__(coordinator, entry, unique_id_suffix=unique_id_suffix)
         self._user_coordinator = user_coordinator
 
-    def _get_temperature(self) -> float | None:
-        """Lecture snapshot de la température AC1."""
+    def _get_ref_temperature(self) -> float | None:
+        """Température de référence pour la sélection du seuil de filtration.
+
+        Source primaire : maxTemperatureTheDayBefore depuis le BPC (température max de la veille).
+        Fallback : température courante de l'eau depuis l'AC1.
+        """
+        if self.coordinator.data is not None and self.coordinator.data.max_temp_day_before is not None:
+            return self.coordinator.data.max_temp_day_before
         if self._user_coordinator.data is None:
             return None
         return self._user_coordinator.data.metrics.temperature_value
@@ -768,10 +791,10 @@ class EasyCareFiltrationNextStartSensor(_FiltrationScheduleSensorBase):
         schedule = self.coordinator.data.filter_schedule
         if schedule is None:
             return None
-        temperature = self._get_temperature()
-        if temperature is None:
+        ref_temp = self._get_ref_temperature()
+        if ref_temp is None:
             return None
-        next_start, _ = schedule.next_filtration_events(temperature, dt_util.now())
+        next_start, _ = schedule.next_filtration_events(ref_temp, dt_util.now())
         return next_start
 
 
@@ -804,10 +827,10 @@ class EasyCareFiltrationNextEndSensor(_FiltrationScheduleSensorBase):
         schedule = self.coordinator.data.filter_schedule
         if schedule is None:
             return None
-        temperature = self._get_temperature()
-        if temperature is None:
+        ref_temp = self._get_ref_temperature()
+        if ref_temp is None:
             return None
-        _, next_end = schedule.next_filtration_events(temperature, dt_util.now())
+        _, next_end = schedule.next_filtration_events(ref_temp, dt_util.now())
         return next_end
 
 
