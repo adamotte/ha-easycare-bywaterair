@@ -251,26 +251,35 @@ class EasyCareClient:
 
     async def get_bpc_programs_data(
         self,
-    ) -> tuple[str | None, int, dict | None, dict | None, FilterSchedule | None, float | None]:
+    ) -> tuple[
+        str | None, int, dict | None, dict | None, FilterSchedule | None,
+        float | None, str | None, int | None,
+    ]:
         """Lit les programmes BPC pour la pompe et les lumières.
 
         Pompe (index 0) — mode de filtration, adaptOffset et planning de filtration :
           mode=0 → MANUAL, mode=1 → CONTINUOUS,
           mode=2 + rule=1 → AUTO, mode=2 + rule=0 → PROG.
           sched (racine du programme) → FilterSchedule pour les plages horaires.
+          state (racine du programme) → état boost ("boost" si boost actif, sinon
+          "active"/"inactive"/…), remainingDuration → durée restante en minutes.
+          Ces deux champs reflètent un boost déclenché depuis l'app mobile.
 
         Lumières (index 1=spot, index 2=escalight) — `programCharacteristics`
         brut retourné tel quel pour un parsing défensif côté coordinator.
 
         Returns:
             Tuple (filtration_mode, adapt_offset, spot_program, escalight_program,
-                   filter_schedule, max_temp_day_before).
+                   filter_schedule, max_temp_day_before, pump_state,
+                   pump_remaining_duration).
             filtration_mode est None si les modules ne sont pas disponibles.
             max_temp_day_before : température maximale de la veille (°C) utilisée par le BPC
             pour sélectionner le seuil de la matrice sched. None si absente de la réponse.
+            pump_state : état racine du programme pompe (ex. "boost"), None si absent.
+            pump_remaining_duration : durée restante du programme pompe en minutes, None si absent.
         """
         if self._watbox is None or self._bpc is None:
-            return None, 0, None, None, None, None
+            return None, 0, None, None, None, None, None, None
         path = API_PATH_BPC_PROGRAMS.format(
             watbox_serial=self._watbox.serial_number, bpc_name=self._bpc.short_name,
         )
@@ -299,6 +308,8 @@ class EasyCareClient:
         spot_program: dict | None = None
         escalight_program: dict | None = None
         filter_schedule: FilterSchedule | None = None
+        pump_state: str | None = None
+        pump_remaining_duration: int | None = None
 
         for prog in programs:
             idx = prog.get("index")
@@ -309,6 +320,20 @@ class EasyCareClient:
                 # Log COMPLET avant tout parsing (crash-safe — s'affiche même si la suite plante).
                 _LOGGER.debug(
                     "BPC programmes — pompe (index 0) programme brut : %s", prog
+                )
+                # État boost — `state` et `remainingDuration` sont à la racine du programme.
+                # Reflète un boost déclenché depuis l'app mobile (state == "boost").
+                state_raw = prog.get("state")
+                pump_state = str(state_raw) if state_raw is not None else None
+                rem_raw = prog.get("remainingDuration")
+                if rem_raw is not None:
+                    try:
+                        pump_remaining_duration = int(rem_raw)
+                    except (TypeError, ValueError):
+                        pump_remaining_duration = None
+                _LOGGER.debug(
+                    "BPC programmes — pompe (index 0) : state=%s remainingDuration=%s",
+                    pump_state, pump_remaining_duration,
                 )
                 # L'offset AUTO est encodé dans sched (masques de bits 24h par seuil de temp).
                 # On identifie l'offset en comparant sched[0] aux tables de référence.
@@ -351,7 +376,10 @@ class EasyCareClient:
                 escalight_program = dict(charac)
                 _LOGGER.debug("BPC programmes — escalight (index 2) programCharacteristics : %s", charac)
 
-        return filtration_mode, adapt_offset, spot_program, escalight_program, filter_schedule, max_temp_day_before
+        return (
+            filtration_mode, adapt_offset, spot_program, escalight_program,
+            filter_schedule, max_temp_day_before, pump_state, pump_remaining_duration,
+        )
 
     async def set_bpc_manual(
         self,
@@ -425,7 +453,13 @@ class EasyCareClient:
         return True
 
     async def start_boost(self, boost_mode: str) -> bool:
-        """Démarre un boost de filtration via l'endpoint programmes BPC.
+        """Démarre un boost de filtration via l'endpoint manuel BPC (voie pompe).
+
+        Un boost = faire tourner la pompe N heures. C'est exactement une commande
+        manuelle ON sur la voie pompe (index 0), la même voie que les lumières
+        (index 1, 2) qui fonctionne de façon fiable et quasi instantanée. On
+        n'utilise donc PAS l'endpoint programmes (qui n'applique pas réellement
+        la commande au module).
 
         Args:
             boost_mode: BOOST4H, BOOST12H, BOOST24H, BOOST36H, BOOST48H ou BOOST72H.
@@ -438,61 +472,27 @@ class EasyCareClient:
             "BOOST36H": 2160, "BOOST48H": 2880, "BOOST72H": 4320,
         }
         duration_minutes = _boost_durations[boost_upper]
-        _LOGGER.debug("Démarrage boost %s (%d min)", boost_upper, duration_minutes)
-        await self._update_boost_via_programs(state="boost", remaining_minutes=duration_minutes)
+        if self._watbox is None or self._bpc is None:
+            _LOGGER.warning("start_boost: modules non disponibles")
+            return False
+        _LOGGER.debug("Démarrage boost %s (%d min) via endpoint manuel", boost_upper, duration_minutes)
+        await self.set_bpc_manual(
+            self._watbox, self._bpc,
+            index=0, action="on", duration_minutes=duration_minutes,
+        )
         return True
 
     async def cancel_boost(self) -> bool:
-        """Annule le boost de filtration en cours via l'endpoint programmes BPC."""
-        _LOGGER.debug("Annulation boost en cours")
-        await self._update_boost_via_programs(state="active", remaining_minutes=0)
-        return True
-
-    async def _update_boost_via_programs(self, *, state: str, remaining_minutes: int) -> None:
-        """Modifie l'état boost du programme pompe (index 0) via GET + POST programmes BPC.
-
-        Les champs `state` et `remainingDuration` sont modifiés au niveau racine
-        de l'objet programme (pas dans programCharacteristics).
-
-        Args:
-            state             : "boost" pour démarrer, "active" pour annuler.
-            remaining_minutes : durée restante en minutes (0 pour annuler).
-        """
+        """Annule le boost de filtration en cours (OFF manuel sur la voie pompe)."""
         if self._watbox is None or self._bpc is None:
-            _LOGGER.warning("_update_boost_via_programs: modules non disponibles")
-            return
-        path = API_PATH_BPC_PROGRAMS.format(
-            watbox_serial=self._watbox.serial_number, bpc_name=self._bpc.short_name,
+            _LOGGER.warning("cancel_boost: modules non disponibles")
+            return False
+        _LOGGER.debug("Annulation boost en cours via endpoint manuel")
+        await self.set_bpc_manual(
+            self._watbox, self._bpc,
+            index=0, action="off",
         )
-        data = await self._request("GET", API_HOST_EASYCARE, path)
-        programs = data.get("programs")
-        if not programs:
-            _LOGGER.warning("_update_boost_via_programs: aucun programme reçu")
-            return
-        modified = False
-        for prog in programs:
-            if prog.get("index") == 0:
-                _LOGGER.debug(
-                    "Boost — programme pompe avant modification : state=%s remainingDuration=%s",
-                    prog.get("state"), prog.get("remainingDuration"),
-                )
-                prog["state"] = state
-                prog["remainingDuration"] = remaining_minutes
-                modified = True
-                break
-        if not modified:
-            _LOGGER.warning("_update_boost_via_programs: programme pompe (index 0) absent")
-            return
-        post_payload: dict[str, Any] = {
-            "programs": programs,
-            "module": self._bpc_module_id,
-            "programmationType": 1,
-        }
-        _LOGGER.debug(
-            "Boost POST — state=%s remainingDuration=%d module=%s",
-            state, remaining_minutes, self._bpc_module_id,
-        )
-        await self._request("POST", API_HOST_EASYCARE, path, json_payload=post_payload)
+        return True
 
     async def set_filtration_mode_with_offset(self, mode_option: str) -> bool:
         """Change le mode de filtration avec gestion de l'offset AUTO.

@@ -111,6 +111,22 @@ class BPCData:
     filter_schedule: FilterSchedule | None = None
     max_temp_day_before: float | None = None
     bpc_temp_reference: int | None = None
+    pump_program_state: str | None = None
+    pump_program_remaining_minutes: int | None = None
+
+    @property
+    def is_boost_active(self) -> bool:
+        """Vrai si un boost de filtration est actif.
+
+        Combine deux sources pour couvrir tous les déclencheurs :
+        - voie pompe (status) avec le tag 'boost' dans `info` ;
+        - état racine du programme pompe (`state == "boost"`), qui reflète
+          notamment un boost déclenché depuis l'app mobile.
+        """
+        if self.pump_program_state == "boost":
+            return True
+        pump = self.get_input(0)
+        return pump is not None and pump.is_boosting
 
     def get_input(self, index: int) -> BPCInput | None:
         """Retourne la voie BPC d'index donné, ou None si absente."""
@@ -373,6 +389,8 @@ class EasyCareBPCCoordinator(DataUpdateCoordinator[BPCData]):
         escalight_program: dict | None = None
         filter_schedule: FilterSchedule | None = None
         max_temp_day_before: float | None = None
+        pump_program_state: str | None = None
+        pump_program_remaining: int | None = None
         try:
             (
                 filtration_mode,
@@ -381,6 +399,8 @@ class EasyCareBPCCoordinator(DataUpdateCoordinator[BPCData]):
                 escalight_program,
                 filter_schedule,
                 max_temp_day_before,
+                pump_program_state,
+                pump_program_remaining,
             ) = await self._client.get_bpc_programs_data()
         except Exception as err:  # noqa: BLE001
             _LOGGER.debug("get_bpc_programs_data ignoré (non-fatal) : %s", err)
@@ -401,6 +421,8 @@ class EasyCareBPCCoordinator(DataUpdateCoordinator[BPCData]):
             filter_schedule=filter_schedule,
             max_temp_day_before=max_temp_day_before,
             bpc_temp_reference=bpc_temp_reference,
+            pump_program_state=pump_program_state,
+            pump_program_remaining_minutes=pump_program_remaining,
         )
 
     def _should_skip_cycle(self) -> bool:
