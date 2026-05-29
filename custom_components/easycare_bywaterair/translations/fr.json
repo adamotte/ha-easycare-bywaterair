@@ -42,16 +42,26 @@
     "step": {
       "init": {
         "title": "easy·care — Réglages de la pompe",
-        "description": "Configurez la puissance nominale de votre pompe de filtration (pour le suivi de consommation) et, si vous avez remplacé votre pompe, son nombre d'heures précédent pour suivre la nouvelle pompe séparément.",
+        "description": "Configurez la puissance nominale de votre pompe de filtration pour le suivi de consommation. Mettez 0 pour désactiver.",
         "data": {
-          "pump_power_w": "Puissance nominale de la pompe (W)",
-          "pump_replacement_runtime_h": "Nombre d'heures de la pompe avant remplacement (h)",
-          "pump_replacement_date": "Date du remplacement de la pompe"
+          "pump_power_w": "Puissance nominale de la pompe (W)"
         },
         "data_description": {
-          "pump_power_w": "Puissance nominale en watts (ex. 150 pour une pompe P35). Mettez 0 pour désactiver les capteurs d'énergie.",
-          "pump_replacement_runtime_h": "Valeur du compteur de durée totale au moment du remplacement de la pompe. Laissez à 0 si vous n'avez jamais remplacé la pompe. Ajoute un capteur « pompe actuelle » qui compte à partir du remplacement.",
-          "pump_replacement_date": "Date à laquelle la pompe a été remplacée (informatif, affiché en attribut)."
+          "pump_power_w": "Puissance nominale en watts (ex. 150 pour une pompe P35). Mettez 0 pour désactiver les capteurs d'énergie."
+        },
+        "sections": {
+          "pump_replacement": {
+            "name": "Remplacement de pompe",
+            "description": "Si vous avez remplacé votre pompe (ex. sous garantie/SAV), renseignez la valeur du compteur de durée au moment du remplacement pour suivre la nouvelle pompe séparément. Laissez à 0 sinon.",
+            "data": {
+              "pump_replacement_runtime_h": "Nombre d'heures de la pompe avant remplacement (h)",
+              "pump_replacement_date": "Date du remplacement de la pompe"
+            },
+            "data_description": {
+              "pump_replacement_runtime_h": "Valeur du compteur de durée totale au moment du remplacement. Ajoute un capteur « pompe actuelle » qui compte à partir du remplacement.",
+              "pump_replacement_date": "Date à laquelle la pompe a été remplacée (informatif, affiché en attribut)."
+            }
+          }
         }
       }
     }

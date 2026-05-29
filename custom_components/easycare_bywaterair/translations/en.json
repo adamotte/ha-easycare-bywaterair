@@ -42,16 +42,26 @@
     "step": {
       "init": {
         "title": "easy·care — Pump settings",
-        "description": "Configure the rated power of your filtration pump (for energy monitoring) and, if you replaced your pump, its previous runtime to track the new pump separately.",
+        "description": "Configure the rated power of your filtration pump for energy monitoring. Set to 0 to disable.",
         "data": {
-          "pump_power_w": "Pump rated power (W)",
-          "pump_replacement_runtime_h": "Pump hours before replacement (h)",
-          "pump_replacement_date": "Pump replacement date"
+          "pump_power_w": "Pump rated power (W)"
         },
         "data_description": {
-          "pump_power_w": "Nominal power of your pump in watts (e.g. 150 for a P35). Set to 0 to disable energy sensors.",
-          "pump_replacement_runtime_h": "Total runtime counter value when the pump was replaced. Leave at 0 if you never replaced the pump. Adds a \"current pump\" sensor counting from the replacement.",
-          "pump_replacement_date": "Date the pump was replaced (informational, shown as an attribute)."
+          "pump_power_w": "Nominal power of your pump in watts (e.g. 150 for a P35). Set to 0 to disable energy sensors."
+        },
+        "sections": {
+          "pump_replacement": {
+            "name": "Pump replacement",
+            "description": "If you replaced your pump (e.g. under warranty), enter the runtime counter value at the time of replacement to track the new pump separately. Leave at 0 otherwise.",
+            "data": {
+              "pump_replacement_runtime_h": "Pump hours before replacement (h)",
+              "pump_replacement_date": "Pump replacement date"
+            },
+            "data_description": {
+              "pump_replacement_runtime_h": "Total runtime counter value when the pump was replaced. Adds a \"current pump\" sensor counting from the replacement.",
+              "pump_replacement_date": "Date the pump was replaced (informational, shown as an attribute)."
+            }
+          }
         }
       }
     }
