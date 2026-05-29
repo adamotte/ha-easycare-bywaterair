@@ -30,13 +30,13 @@ Home Assistant integration for pools equipped with the
 ### Data reading
 - 🌡️ Water temperature, pH, chlorine (redox/ORP)
 - 🔋 AC1 analyser battery level
-- 📊 Filtration pressure (if LR-PR sensor is present)
+- 📊 Filtration pressure and 🔋 battery level (if LR-PR sensor is present)
 - 🔔 **Pool action notifications** — translated alerts (calibration required, wintering, chlorine treatment…) with automatic HA persistent notification on new event
 - ⚙️ Current filtration mode and pump counters
 - ⚡ **Energy monitoring**: pump power (W) and cumulative energy (kWh) — compatible with the HA Energy Dashboard
 - 💡 **Light mode**: AUTO / MANUAL / OFF / PAUSE (with time slots and pause duration as attributes)
 - 🕐 **Filtration schedule** — daily duration, next start and next stop derived from the BPC programme (temperature-aware)
-- 🔄 **Software update notifications** — detects available firmware updates for BPC and AC1, exposed as native HA update entities (visible in Settings → Updates)
+- 🔄 **Software update notifications** — detects available firmware updates for BPC, AC1 and LR-PR, exposed as native HA update entities (visible in Settings → Updates)
 
 ### Control
 - 💡 **Lights**: spotlight (spot) and step lighting (escalight) — MANUAL on (1h to 6h max)
@@ -49,7 +49,7 @@ Home Assistant integration for pools equipped with the
 - 📱 **UI-based configuration** (no YAML)
 - 🌐 **Multi-language** (French, English)
 - 🧩 **6 HA services** callable from automations
-- 🔔 **Native update notifications** — HA badge when BPC or AC1 has a software update available
+- 🔔 **Native update notifications** — HA badge when BPC, AC1 or LR-PR has a software update available
 - 🏠 **Properly modelled devices**: WATBOX → BPC, AC1, LR-PR
 
 ## 📦 Installation
