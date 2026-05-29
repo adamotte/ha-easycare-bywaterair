@@ -55,7 +55,7 @@
             "description": "Si vous avez remplacé votre pompe (ex. sous garantie/SAV), renseignez la valeur du compteur de durée au moment du remplacement pour suivre la nouvelle pompe séparément. Laissez à 0 sinon.",
             "data": {
               "pump_replacement_runtime_h": "Nombre d'heures de la pompe avant remplacement (h)",
-              "pump_replacement_date": "Date du remplacement de la pompe"
+              "pump_replacement_date": "Date de remplacement de la pompe"
             },
             "data_description": {
               "pump_replacement_runtime_h": "Valeur du compteur de durée totale au moment du remplacement. Ajoute un capteur « pompe actuelle » qui compte à partir du remplacement.",
