@@ -1,20 +1,16 @@
-**Notifications HA pour les actions piscine**
+**Boost de filtration — vrai mode Boost**
 
-Le sensor "Dernière notification" affiche désormais un libellé traduit (français et anglais) plutôt que la valeur brute de l'API (`shouldBeCalibrated`, `shouldBeWintered`, etc.).
-
-En complément, une notification persistante est créée automatiquement dans HA (visible sous la cloche) lorsqu'une nouvelle action piscine est détectée. Elle n'est créée qu'une seule fois par action — pas de doublon à chaque refresh. L'utilisateur peut la fermer ; elle ne réapparaîtra que si une action différente est signalée.
+Le bouton Boost déclenche désormais le **véritable mode Boost** de la pompe (visible comme « Boost » dans l'application mobile Waterair), et non plus une simple marche forcée. Le capteur **Temps boost restant** se met à jour et décompte correctement, et l'annulation se synchronise dans les deux sens (HA ↔ app).
 
 ---
 
-**Correction des plages de filtration (next_start / next_end / durée journalière)**
+**Capteur de pression LR-PR (issue #8)**
 
-Les capteurs `filtration_next_start`, `filtration_next_end` et `filtration_daily_duration` affichent maintenant les bonnes valeurs, stables toute la journée, et cohérentes avec l'application mobile Waterair.
+- Nouveau capteur de **niveau de batterie** du capteur de pression LR-PR.
+- Nouvelle entité de **mise à jour firmware** pour le LR-PR (notification uniquement, visible sous Paramètres → Mises à jour).
 
-**Cause du bug :** les versions précédentes déduisaient le seuil de filtration depuis la température ambiante lue par le capteur BPC (`temperature` racine de la réponse status) — valeur qui fluctue avec la chaleur et provoquait des oscillations entre plusieurs plages (ex. 21h00 / 22h00).
+---
 
-**Correction :** utilisation du champ `tempRef` de la voie pompe, qui contient l'index de seuil committé par le BPC **une seule fois au démarrage du cycle matinal**. Cet index (ex. 6 → seuil 27°C → 9h–19h) reste stable toute la journée, indépendamment des variations de température.
+**Correctifs**
 
-**Ce qui change :**
-- Les trois capteurs de filtration utilisent désormais directement l'index BPC (`bpc_temp_ref_idx` dans les attributs de `filtration_daily_duration`) plutôt qu'une comparaison de température
-- L'attribut de diagnostic `bpc_temp_reference_c` (température air incorrecte) est remplacé par `bpc_temp_ref_idx` (index direct, ex. `6`)
-- Fallback sur la température eau AC1 uniquement si `tempRef` est absent (démarrage à froid)
+- Icône correcte (`mdi:package-up`) pour les entités de mise à jour.

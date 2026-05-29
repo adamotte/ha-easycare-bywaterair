@@ -183,22 +183,30 @@ class EasyCareBoostSelect(EasyCareBPCEntity[EasyCareBPCCoordinator], SelectEntit
         return self._current_option_from_data()
 
     def _current_option_from_data(self) -> str:
-        """Dérive l'option courante depuis les données du coordinateur."""
+        """Dérive l'option courante depuis les données du coordinateur.
+
+        Un boost est actif s'il est signalé soit par la voie pompe (tag 'boost'),
+        soit par l'état racine du programme pompe (state == 'boost', cas d'un
+        boost déclenché depuis l'app mobile).
+        """
         if self.coordinator.data is None:
             return HA_BOOST_OFF
-        pump = self.coordinator.data.get_input(0)
-        if pump is not None and pump.is_boosting:
+        if self.coordinator.data.is_boost_active:
             return HA_BOOST_ACTIVE
         return HA_BOOST_OFF
 
     @property
     def extra_state_attributes(self) -> dict:
         """Temps boost restant en attribut."""
-        if self.coordinator.data is None:
+        data = self.coordinator.data
+        if data is None or not data.is_boost_active:
             return {"remaining": "00:00"}
-        pump = self.coordinator.data.get_input(0)
-        if pump is not None and pump.is_boosting:
+        pump = data.get_input(0)
+        if pump is not None and pump.remaining_time not in (None, "", "00:00"):
             return {"remaining": pump.remaining_time}
+        if data.pump_program_remaining_minutes:
+            mins = data.pump_program_remaining_minutes
+            return {"remaining": f"{mins // 60:02d}:{mins % 60:02d}"}
         return {"remaining": "00:00"}
 
     async def async_select_option(self, option: str) -> None:

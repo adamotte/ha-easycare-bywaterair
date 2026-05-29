@@ -119,6 +119,7 @@
       },
       "treatment": {"name": "Active treatment"},
       "battery_ac1": {"name": "AC1 battery"},
+      "battery_lrpr": {"name": "LR-PR battery"},
       "pump_state": {
         "name": "Pump state",
         "state": {"on": "On", "off": "Off"}
@@ -149,7 +150,8 @@
     },
     "update": {
       "bpc_firmware": {"name": "Software update"},
-      "ac1_firmware": {"name": "Software update"}
+      "ac1_firmware": {"name": "Software update"},
+      "lrpr_firmware": {"name": "Software update"}
     }
   },
   "services": {
