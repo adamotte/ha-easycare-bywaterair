@@ -41,13 +41,17 @@
   "options": {
     "step": {
       "init": {
-        "title": "easy·care — Pump power",
-        "description": "Configure the rated power of your filtration pump to enable energy monitoring in the HA energy dashboard. Set to 0 to disable.",
+        "title": "easy·care — Pump settings",
+        "description": "Configure the rated power of your filtration pump (for energy monitoring) and, if you replaced your pump, its previous runtime to track the new pump separately.",
         "data": {
-          "pump_power_w": "Pump rated power (W)"
+          "pump_power_w": "Pump rated power (W)",
+          "pump_replacement_runtime_h": "Pump hours before replacement (h)",
+          "pump_replacement_date": "Pump replacement date"
         },
         "data_description": {
-          "pump_power_w": "Nominal power of your pump in watts (e.g. 150 for a P35). Set to 0 to disable energy sensors."
+          "pump_power_w": "Nominal power of your pump in watts (e.g. 150 for a P35). Set to 0 to disable energy sensors.",
+          "pump_replacement_runtime_h": "Total runtime counter value when the pump was replaced. Leave at 0 if you never replaced the pump. Adds a \"current pump\" sensor counting from the replacement.",
+          "pump_replacement_date": "Date the pump was replaced (informational, shown as an attribute)."
         }
       }
     }
@@ -163,6 +167,8 @@
       "pump_power": {"name": "Pump power"},
       "pump_energy": {"name": "Pump energy"},
       "pump_total_runtime": {"name": "Pump total runtime"},
+      "pump_current_runtime": {"name": "Current pump runtime"},
+      "pump_current_energy": {"name": "Current pump energy"},
       "pump_counter_date": {"name": "Counter reference date"},
       "boost_remaining": {"name": "Boost remaining"},
       "spot_mode": {"name": "Spotlight mode"},
