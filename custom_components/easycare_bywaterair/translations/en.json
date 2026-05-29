@@ -175,10 +175,10 @@
         }
       },
       "pump_power": {"name": "Pump power"},
-      "pump_energy": {"name": "Pump energy"},
+      "pump_energy": {"name": "Total energy"},
       "pump_total_runtime": {"name": "Total operating time"},
       "pump_current_runtime": {"name": "Operating time"},
-      "pump_current_energy": {"name": "Current pump energy"},
+      "pump_current_energy": {"name": "Energy"},
       "pump_counter_date": {"name": "Counter reference date"},
       "boost_remaining": {"name": "Boost remaining"},
       "spot_mode": {"name": "Spotlight mode"},

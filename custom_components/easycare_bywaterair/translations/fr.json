@@ -175,10 +175,10 @@
         }
       },
       "pump_power": {"name": "Puissance pompe"},
-      "pump_energy": {"name": "Énergie pompe"},
+      "pump_energy": {"name": "Énergie totale"},
       "pump_total_runtime": {"name": "Durée totale de fonctionnement"},
       "pump_current_runtime": {"name": "Durée de fonctionnement"},
-      "pump_current_energy": {"name": "Énergie pompe actuelle"},
+      "pump_current_energy": {"name": "Énergie"},
       "pump_counter_date": {"name": "Date référence compteur"},
       "boost_remaining": {"name": "Temps boost restant"},
       "spot_mode": {"name": "Mode projecteur"},
