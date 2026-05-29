@@ -32,9 +32,8 @@ from ..const import (
     API_PATH_GET_USER,
     API_PATH_GET_USER_MODULES,
     API_PATH_REPORT_MANUAL_SENT,
-    API_PATH_REPORT_PROGRAMS_SENT,
-    API_PATH_UPDATE_PROGRAMS,
     BOOST_MODES,
+    BPC_ACTION_BOOST,
     BPC_ACTION_OFF,
     BPC_ACTION_ON,
     FILTRATION_MODES,
@@ -423,11 +422,14 @@ class EasyCareClient:
         if action_lower == "on":
             action_code = BPC_ACTION_ON
             payload_extra: dict[str, Any] = {"manualDuration": int(duration_minutes) * 60}
+        elif action_lower == "boost":
+            action_code = BPC_ACTION_BOOST
+            payload_extra = {"manualDuration": int(duration_minutes) * 60}
         elif action_lower == "off":
             action_code = BPC_ACTION_OFF
             payload_extra = {}
         else:
-            raise ValueError(f"Action invalide : {action!r} (attendu 'on' ou 'off')")
+            raise ValueError(f"Action invalide : {action!r} (attendu 'on', 'boost' ou 'off')")
 
         payload = {"pool": {"index": int(index), "action": action_code, **payload_extra}}
         path = API_PATH_BPC_MANUAL.format(
@@ -437,7 +439,7 @@ class EasyCareClient:
         await self._request("POST", API_HOST_EASYCARE, path, json_payload=payload)
 
         pool_cmd: dict[str, Any] = {"index": int(index), "action": action_code}
-        if action_code == BPC_ACTION_ON:
+        if action_code in (BPC_ACTION_ON, BPC_ACTION_BOOST):
             pool_cmd["manualDuration"] = int(duration_minutes) * 60
         report_payload: dict[str, Any] = {
             "id": bpc.id,
@@ -465,75 +467,12 @@ class EasyCareClient:
         await self._update_pump_program(mode=mode_upper)
         return True
 
-    async def _write_pump_program_state(
-        self, *, state: str, remaining_minutes: int,
-    ) -> bool:
-        """Écrit state + remainingDuration (racine prog pompe index 0) via /api/updatePrograms.
-
-        GET lecture programmes, modif, POST écriture + confirmation reportProgramsDatasSent.
-        state="boost" pour démarrer, "active" pour annuler.
-        """
-        if self._watbox is None or self._bpc is None:
-            _LOGGER.warning("_write_pump_program_state: modules non disponibles")
-            return False
-        read_path = API_PATH_BPC_PROGRAMS.format(
-            watbox_serial=self._watbox.serial_number, bpc_name=self._bpc.short_name,
-        )
-        data = await self._request("GET", API_HOST_EASYCARE, read_path)
-        programs = data.get("programs")
-        if not programs:
-            _LOGGER.warning(
-                "_write_pump_program_state: aucun programme reçu — réponse : %s", data
-            )
-            return False
-        modified = False
-        for prog in programs:
-            if prog.get("index") == 0:
-                _LOGGER.debug(
-                    "_write_pump_program_state — pompe avant modif : "
-                    "state=%s remainingDuration=%s",
-                    prog.get("state"), prog.get("remainingDuration"),
-                )
-                prog["state"] = state
-                prog["remainingDuration"] = int(remaining_minutes)
-                modified = True
-                break
-        if not modified:
-            _LOGGER.warning(
-                "_write_pump_program_state: programme pompe (index 0) absent parmi %s",
-                [p.get("index") for p in programs],
-            )
-            return False
-        post_payload: dict[str, Any] = {
-            "programs": programs,
-            "module": self._bpc_module_id,
-            "programmationType": 1,
-        }
-        _LOGGER.debug(
-            "_write_pump_program_state POST /api/updatePrograms — "
-            "state=%s remainingDuration=%d module=%r",
-            state, remaining_minutes, self._bpc_module_id,
-        )
-        resp = await self._request(
-            "POST", API_HOST_EASYCARE, API_PATH_UPDATE_PROGRAMS, json_payload=post_payload,
-        )
-        _LOGGER.debug("_write_pump_program_state — réponse updatePrograms : %s", resp)
-        report_payload: dict[str, Any] = {
-            "id": self._bpc.id,
-            "command": {"programs": programs, "programmationType": 1},
-            "route": "http",
-        }
-        try:
-            await self._request(
-                "POST", API_HOST_EASYCARE, API_PATH_REPORT_PROGRAMS_SENT,
-                json_payload=report_payload,
-            )
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.warning("Échec reportProgramsDatasSent (non-critique) : %s", err)
-        return True
-
     async def start_boost(self, boost_mode: str) -> bool:
-        """Démarre le boost (state="boost") via l'écriture programmes.
+        """Démarre le boost via l'endpoint manuel BPC, action=boost (code 3).
+
+        Le status pompe expose `origin` = code d'action envoyé (on=2 → origin=2) ;
+        le vrai boost montre origin=3. On envoie donc action 'boost' (3) + manualDuration
+        sur la voie pompe (index 0), via le même endpoint manuel que les lumières.
 
         boost_mode : BOOST4H, BOOST12H, BOOST24H, BOOST36H, BOOST48H ou BOOST72H.
         """
@@ -545,18 +484,24 @@ class EasyCareClient:
             "BOOST36H": 2160, "BOOST48H": 2880, "BOOST72H": 4320,
         }
         duration_minutes = _boost_durations[boost_upper]
-        _LOGGER.debug(
-            "Démarrage boost %s (%d min) via écriture programmes (state=boost)",
-            boost_upper, duration_minutes,
-        )
-        return await self._write_pump_program_state(
-            state="boost", remaining_minutes=duration_minutes,
+        if self._watbox is None or self._bpc is None:
+            _LOGGER.warning("start_boost: modules non disponibles")
+            return False
+        _LOGGER.debug("Démarrage boost %s (%d min) via action=boost", boost_upper, duration_minutes)
+        return await self.set_bpc_manual(
+            self._watbox, self._bpc,
+            index=0, action="boost", duration_minutes=duration_minutes,
         )
 
     async def cancel_boost(self) -> bool:
-        """Annule le boost de filtration en cours (state="active", remainingDuration=0)."""
-        _LOGGER.debug("Annulation boost en cours via écriture programmes (state=active)")
-        return await self._write_pump_program_state(state="active", remaining_minutes=0)
+        """Annule le boost en cours (OFF manuel sur la voie pompe)."""
+        if self._watbox is None or self._bpc is None:
+            _LOGGER.warning("cancel_boost: modules non disponibles")
+            return False
+        _LOGGER.debug("Annulation boost en cours via OFF manuel")
+        return await self.set_bpc_manual(
+            self._watbox, self._bpc, index=0, action="off",
+        )
 
     async def set_filtration_mode_with_offset(self, mode_option: str) -> bool:
         """Change le mode de filtration avec gestion de l'offset AUTO.

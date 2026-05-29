@@ -28,9 +28,6 @@ API_PATH_REPORT_MANUAL_SENT: Final = "/api/reportManualCommandSent"
 API_PATH_GET_POOL_STATUS: Final = "/api/getPoolStatus"
 API_PATH_SET_STATUS_COMMAND: Final = "/api/setStatusCommandToSend"
 API_PATH_BPC_PROGRAMS: Final = "/api/module/{watbox_serial}/programs/{bpc_name}"
-# Écriture des programmes (le chemin per-module ci-dessus n'est que la lecture).
-API_PATH_UPDATE_PROGRAMS: Final = "/api/updatePrograms"
-API_PATH_REPORT_PROGRAMS_SENT: Final = "/api/reportProgramsDatasSent"
 API_PATH_FIRMWARE: Final = "/api/module/{watbox_serial}/firmware/{module_name}"
 
 SSO_HOST: Final = "https://sso.waterair.com"
@@ -81,6 +78,8 @@ BPC_INDEX_ESCALIGHT: Final = 2
 
 BPC_ACTION_OFF: Final = 1
 BPC_ACTION_ON: Final = 2
+# Hypothèse (origin status = code action) : on=2 → origin=2, donc boost = action 3 → origin=3.
+BPC_ACTION_BOOST: Final = 3
 
 DEFAULT_DURATION_PUMP_HOURS: Final = 1
 DEFAULT_DURATION_LIGHT_HOURS: Final = 1
