@@ -19,6 +19,7 @@ CONF_AUTH_CODE: Final = "auth_code"
 CONF_PUMP_POWER_W: Final = "pump_power_w"
 CONF_PUMP_REPLACEMENT_RUNTIME_H: Final = "pump_replacement_runtime_h"
 CONF_PUMP_REPLACEMENT_DATE: Final = "pump_replacement_date"
+CONF_PUMP_REPLACEMENT_PREVIOUS_POWER_W: Final = "pump_replacement_previous_power_w"
 
 API_HOST_EASYCARE: Final = "https://easycare.waterair.com"
 API_PATH_TOKEN_FROM_B2C: Final = "/oauth2/tokenFromAzureADB2CIdToken"

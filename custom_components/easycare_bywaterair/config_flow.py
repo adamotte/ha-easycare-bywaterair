@@ -38,6 +38,7 @@ from .const import (
     CONF_POOL_ID,
     CONF_PUMP_POWER_W,
     CONF_PUMP_REPLACEMENT_DATE,
+    CONF_PUMP_REPLACEMENT_PREVIOUS_POWER_W,
     CONF_PUMP_REPLACEMENT_RUNTIME_H,
     CONF_REFRESH_TOKEN,
     DOMAIN,
@@ -193,6 +194,7 @@ class EasyCareOptionsFlow(OptionsFlow):
         opts = self.config_entry.options
         current_power = opts.get(CONF_PUMP_POWER_W, 0)
         current_baseline = opts.get(CONF_PUMP_REPLACEMENT_RUNTIME_H, 0)
+        current_prev_power = opts.get(CONF_PUMP_REPLACEMENT_PREVIOUS_POWER_W, 0)
         current_date = opts.get(CONF_PUMP_REPLACEMENT_DATE)
         return self.async_show_form(
             step_id="init",
@@ -205,6 +207,9 @@ class EasyCareOptionsFlow(OptionsFlow):
                         vol.Optional(
                             CONF_PUMP_REPLACEMENT_RUNTIME_H, default=current_baseline
                         ): vol.All(vol.Coerce(int), vol.Range(min=0, max=100000)),
+                        vol.Optional(
+                            CONF_PUMP_REPLACEMENT_PREVIOUS_POWER_W, default=current_prev_power
+                        ): vol.All(vol.Coerce(int), vol.Range(min=0, max=10000)),
                         vol.Optional(
                             CONF_PUMP_REPLACEMENT_DATE,
                             description={"suggested_value": current_date},

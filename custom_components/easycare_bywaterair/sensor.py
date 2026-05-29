@@ -62,6 +62,7 @@ from .const import (
     BPC_INDEX_PUMP,
     CONF_PUMP_POWER_W,
     CONF_PUMP_REPLACEMENT_DATE,
+    CONF_PUMP_REPLACEMENT_PREVIOUS_POWER_W,
     CONF_PUMP_REPLACEMENT_RUNTIME_H,
     DOMAIN,
     HA_MODE_AUTO,
@@ -161,15 +162,16 @@ async def async_setup_entry(
             EasyCareFiltrationNextEndSensor(coords.bpc, coords.user, entry),
         ])
         pump_power_w: int = entry.options.get(CONF_PUMP_POWER_W, 0)
+        # Suivi de remplacement de pompe : baseline d'heures + puissance de l'ancienne
+        # pompe (pour calculer l'énergie totale même si la puissance a changé au SAV).
+        baseline_h: int = entry.options.get(CONF_PUMP_REPLACEMENT_RUNTIME_H, 0)
+        prev_power_w: int = entry.options.get(CONF_PUMP_REPLACEMENT_PREVIOUS_POWER_W, 0)
+        replacement_date: str | None = entry.options.get(CONF_PUMP_REPLACEMENT_DATE)
         if pump_power_w > 0:
             sensors.extend([
                 EasyCarePumpPowerSensor(coords.bpc, entry, pump_power_w),
-                EasyCarePumpEnergySensor(coords.bpc, entry, pump_power_w),
+                EasyCarePumpEnergySensor(coords.bpc, entry, pump_power_w, baseline_h, prev_power_w),
             ])
-        # Suivi de remplacement de pompe : capteurs "pompe actuelle" (depuis le
-        # remplacement) si une baseline d'heures a été renseignée dans les options.
-        baseline_h: int = entry.options.get(CONF_PUMP_REPLACEMENT_RUNTIME_H, 0)
-        replacement_date: str | None = entry.options.get(CONF_PUMP_REPLACEMENT_DATE)
         if baseline_h > 0:
             sensors.append(
                 EasyCarePumpCurrentRuntimeSensor(coords.bpc, entry, baseline_h, replacement_date)
@@ -566,10 +568,12 @@ class EasyCarePumpPowerSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], SensorE
 
 
 class EasyCarePumpEnergySensor(EasyCareBPCEntity[EasyCareBPCCoordinator], SensorEntity):
-    """Énergie cumulée de la pompe depuis la date de remise à zéro du compteur.
+    """Énergie cumulée totale de la pompe depuis la date de référence du compteur.
 
-    Calculée à partir du temps total d'activation (minutes) et de la puissance
-    nominale configurée. Compatible avec le dashboard énergie de HA.
+    Calculée à partir du temps total d'activation et de la puissance configurée.
+    Si la pompe a été remplacée par un modèle de puissance différente (ex. kit
+    P40 500 W → P35 150 W), la part avant remplacement est valorisée à l'ancienne
+    puissance et la part après à la puissance actuelle. Compatible dashboard énergie.
     """
 
     _attr_translation_key = "pump_energy"
@@ -578,9 +582,14 @@ class EasyCarePumpEnergySensor(EasyCareBPCEntity[EasyCareBPCCoordinator], Sensor
     _attr_state_class = SensorStateClass.TOTAL_INCREASING
     _attr_suggested_display_precision = 3
 
-    def __init__(self, coordinator: EasyCareBPCCoordinator, entry: ConfigEntry, power_w: int) -> None:
+    def __init__(
+        self, coordinator: EasyCareBPCCoordinator, entry: ConfigEntry,
+        power_w: int, baseline_h: int = 0, previous_power_w: int = 0,
+    ) -> None:
         super().__init__(coordinator, entry, unique_id_suffix="pump_energy")
         self._power_w = power_w
+        self._baseline_h = baseline_h
+        self._previous_power_w = previous_power_w
 
     @property
     def native_value(self) -> float | None:
@@ -589,14 +598,28 @@ class EasyCarePumpEnergySensor(EasyCareBPCEntity[EasyCareBPCCoordinator], Sensor
         minutes = self.coordinator.data.pump_total_activation_minutes
         if minutes is None:
             return None
-        return round(minutes / 60 * self._power_w / 1000, 3)
+        total_h = minutes / 60
+        # Sans remplacement (ou puissance ancienne non renseignée) : puissance unique.
+        if self._baseline_h <= 0 or self._previous_power_w <= 0:
+            return round(total_h * self._power_w / 1000, 3)
+        # Avec changement de puissance au remplacement : valorisation en deux parts.
+        before_h = min(total_h, self._baseline_h)
+        after_h = max(0.0, total_h - self._baseline_h)
+        wh = before_h * self._previous_power_w + after_h * self._power_w
+        return round(wh / 1000, 3)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         if self.coordinator.data is None:
             return {}
         reset = self.coordinator.data.pump_activation_reset_date
-        return {"counter_reset_date": reset.date().isoformat() if reset else None}
+        attrs: dict[str, Any] = {
+            "counter_reset_date": reset.date().isoformat() if reset else None,
+        }
+        if self._baseline_h > 0 and self._previous_power_w > 0:
+            attrs["previous_power_w"] = self._previous_power_w
+            attrs["baseline_h"] = self._baseline_h
+        return attrs
 
 
 class EasyCarePumpCurrentRuntimeSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], SensorEntity):
