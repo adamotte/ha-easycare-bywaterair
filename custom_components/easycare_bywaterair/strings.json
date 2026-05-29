@@ -3,14 +3,17 @@
     "step": {
       "user": {
         "title": "easy·care by Waterair — Setup",
-        "description": "Enter your Waterair account credentials. The integration will handle the authentication automatically.\n\n> **Note:** Two-factor authentication (MFA) is not supported.",
+        "description": "Enter your Waterair account credentials.",
         "data": {
           "username": "Email address",
-          "password": "Password",
-          "pool_id": "Pool number (if multiple pools)"
-        },
-        "data_description": {
-          "pool_id": "Leave at 1 if you only have one pool."
+          "password": "Password"
+        }
+      },
+      "pool": {
+        "title": "easy·care — Pool selection",
+        "description": "Your account manages several pools. Select the one to configure.",
+        "data": {
+          "pool_id": "Pool"
         }
       },
       "reauth_confirm": {

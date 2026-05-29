@@ -1,8 +1,11 @@
 """Config flow pour Easy-care by Waterair.
 
-Étape unique : saisie de l'email et du mot de passe Waterair. L'intégration
-gère silencieusement le flow OAuth2 Azure B2C (PKCE, redirection msauth://).
-Le reauth flow réutilise le même formulaire sans recréer le ConfigEntry.
+Étape 1 : saisie de l'email et du mot de passe Waterair. L'intégration gère
+silencieusement le flow OAuth2 Azure B2C (PKCE, redirection msauth://).
+Étape 2 (uniquement si le compte gère plusieurs piscines) : choix de la piscine
+à configurer dans une liste déroulante. Les comptes mono-piscine (cas courant)
+ne voient jamais cette étape.
+Le reauth flow réutilise le même formulaire et conserve la piscine déjà choisie.
 """
 
 from __future__ import annotations
@@ -22,7 +25,6 @@ from .api.exceptions import (
     EasyCareConnectionError,
     EasyCareError,
     EasyCareInvalidCredentialsError,
-    EasyCareInvalidResponseError,
     EasyCareLoginError,
     EasyCareTimeoutError,
 )
@@ -42,7 +44,6 @@ _LOGGER = logging.getLogger(__name__)
 STEP_USER_DATA_SCHEMA = vol.Schema({
     vol.Required(CONF_USERNAME): str,
     vol.Required(CONF_PASSWORD): str,
-    vol.Optional(CONF_POOL_ID, default=1): vol.All(vol.Coerce(int), vol.Range(min=1, max=10)),
 })
 
 STEP_REAUTH_DATA_SCHEMA = vol.Schema({
@@ -58,6 +59,10 @@ class EasyCareConfigFlow(ConfigFlow, domain=DOMAIN):
 
     def __init__(self) -> None:
         self._reauth_entry: ConfigEntry | None = None
+        # Tokens obtenus à l'étape 1, conservés en mémoire pour l'étape 2.
+        self._pending_data: dict[str, Any] | None = None
+        # Libellés des piscines (index 0 = pool_id 1), pour la liste déroulante.
+        self._pool_labels: list[str] = []
 
     @staticmethod
     @callback
@@ -65,10 +70,10 @@ class EasyCareConfigFlow(ConfigFlow, domain=DOMAIN):
         return EasyCareOptionsFlow()
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        """Étape principale : saisie email/mot de passe."""
+        """Étape 1 : saisie email/mot de passe."""
         errors: dict[str, str] = {}
         if user_input is not None:
-            return await self._async_validate_and_create(user_input, errors)
+            return await self._async_login(user_input, errors)
         return self.async_show_form(step_id="user", data_schema=STEP_USER_DATA_SCHEMA)
 
     async def async_step_reauth(self, entry_data: dict[str, Any]) -> ConfigFlowResult:
@@ -80,9 +85,7 @@ class EasyCareConfigFlow(ConfigFlow, domain=DOMAIN):
         """Étape de confirmation du reauth — l'utilisateur fournit ses identifiants."""
         errors: dict[str, str] = {}
         if user_input is not None:
-            assert self._reauth_entry is not None
-            user_input[CONF_POOL_ID] = self._reauth_entry.data.get(CONF_POOL_ID, 1)
-            return await self._async_validate_and_create(user_input, errors)
+            return await self._async_login(user_input, errors)
         suggested: dict[str, str] = {}
         if self._reauth_entry is not None:
             suggested[CONF_USERNAME] = self._reauth_entry.data.get(CONF_USERNAME, "")
@@ -92,26 +95,29 @@ class EasyCareConfigFlow(ConfigFlow, domain=DOMAIN):
             suggested_values=suggested,
         )
 
-    async def _async_validate_and_create(
+    async def async_step_pool(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Étape 2 : choix de la piscine (uniquement si le compte en gère plusieurs)."""
+        if user_input is not None:
+            pool_id = self._pool_labels.index(user_input[CONF_POOL_ID]) + 1
+            return await self._async_finalize(pool_id)
+        return self.async_show_form(
+            step_id="pool",
+            data_schema=vol.Schema({vol.Required(CONF_POOL_ID): vol.In(self._pool_labels)}),
+        )
+
+    async def _async_login(
         self, user_input: dict[str, Any], errors: dict[str, str],
     ) -> ConfigFlowResult:
-        """Valide les identifiants via le flow OAuth2 Azure B2C et crée/met à jour l'entry."""
+        """Valide les identifiants via le flow OAuth2 et oriente vers l'étape suivante."""
         email = user_input[CONF_USERNAME].strip()
         password = user_input[CONF_PASSWORD]
-        pool_id = user_input.get(CONF_POOL_ID, 1)
         session = async_get_clientsession(self.hass)
         auth = EasyCareAuth(session=session)
         try:
             tokens = await auth.login_with_credentials(email, password)
             bearer = auth.bearer
-            client = EasyCareClient(session, auth, pool_id=pool_id)
-            try:
-                await client.get_user()
-            except EasyCareInvalidResponseError as err:
-                if "hors limites" in str(err) or "Aucune piscine" in str(err):
-                    errors["base"] = "invalid_pool_id"
-                    return self._show_form(errors)
-                raise
+            client = EasyCareClient(session, auth, pool_id=1)
+            pool_labels = await client.list_pools()
         except EasyCareInvalidCredentialsError:
             errors["base"] = "invalid_credentials"
         except EasyCareLoginError:
@@ -125,26 +131,42 @@ class EasyCareConfigFlow(ConfigFlow, domain=DOMAIN):
             _LOGGER.exception("Erreur inattendue pendant le config flow")
             errors["base"] = "unknown"
         else:
-            data_to_save = {
+            if not pool_labels:
+                errors["base"] = "invalid_pool_id"
+                return self._show_form(errors)
+            self._pending_data = {
                 CONF_USERNAME: email,
                 CONF_REFRESH_TOKEN: tokens.refresh_token,
                 CONF_ID_TOKEN: tokens.id_token,
                 CONF_ID_TOKEN_EXPIRES_AT: tokens.expires_at,
                 CONF_BEARER: bearer.bearer if bearer else "",
                 CONF_BEARER_EXPIRES_AT: bearer.expires_at if bearer else 0.0,
-                CONF_POOL_ID: pool_id,
             }
+            self._pool_labels = pool_labels
+            # Reauth : on conserve la piscine déjà configurée, sans redemander.
             if self._reauth_entry is not None:
-                self.hass.config_entries.async_update_entry(self._reauth_entry, data=data_to_save)
-                await self.hass.config_entries.async_reload(self._reauth_entry.entry_id)
-                return self.async_abort(reason="reauth_successful")
-            await self.async_set_unique_id(f"easycare_pool_{pool_id}")
-            self._abort_if_unique_id_configured()
-            return self.async_create_entry(title=f"easy·care Piscine {pool_id}", data=data_to_save)
+                return await self._async_finalize(self._reauth_entry.data.get(CONF_POOL_ID, 1))
+            # Mono-piscine (cas courant) : on termine directement.
+            if len(pool_labels) == 1:
+                return await self._async_finalize(1)
+            # Multi-piscines : on demande à l'utilisateur de choisir.
+            return await self.async_step_pool()
         return self._show_form(errors)
 
+    async def _async_finalize(self, pool_id: int) -> ConfigFlowResult:
+        """Crée ou met à jour l'entry avec les tokens obtenus et la piscine choisie."""
+        assert self._pending_data is not None
+        data_to_save = {**self._pending_data, CONF_POOL_ID: pool_id}
+        if self._reauth_entry is not None:
+            self.hass.config_entries.async_update_entry(self._reauth_entry, data=data_to_save)
+            await self.hass.config_entries.async_reload(self._reauth_entry.entry_id)
+            return self.async_abort(reason="reauth_successful")
+        await self.async_set_unique_id(f"easycare_pool_{pool_id}")
+        self._abort_if_unique_id_configured()
+        return self.async_create_entry(title=f"easy·care Piscine {pool_id}", data=data_to_save)
+
     def _show_form(self, errors: dict[str, str]) -> ConfigFlowResult:
-        """Ré-affiche le bon formulaire avec les erreurs."""
+        """Ré-affiche le bon formulaire d'identifiants avec les erreurs."""
         if self._reauth_entry is not None:
             return self.async_show_form(
                 step_id="reauth_confirm", data_schema=STEP_REAUTH_DATA_SCHEMA, errors=errors,
