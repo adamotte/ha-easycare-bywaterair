@@ -6,7 +6,7 @@ Expose les durées configurables des voies lumineuses BPC :
 
 Ces valeurs sont purement locales (non envoyées au serveur) et lues par les
 entités light lors du `light.turn_on`. La persistance entre redémarrages HA
-est assurée par RestoreEntity. Plage : 1 à 6 heures, par pas de 0.5h.
+est assurée par RestoreEntity. Plage : 1 à 6 heures, par pas de 1h (slider).
 """
 
 from __future__ import annotations
@@ -62,9 +62,9 @@ class EasyCareDurationNumberBase(
 
     _attr_native_min_value = 1.0
     _attr_native_max_value = 6.0
-    _attr_native_step = 0.5
+    _attr_native_step = 1.0
     _attr_native_unit_of_measurement = UnitOfTime.HOURS
-    _attr_mode = NumberMode.BOX
+    _attr_mode = NumberMode.SLIDER
     _attr_icon = "mdi:timer-outline"
 
     def __init__(
