@@ -71,7 +71,9 @@ directory of your HA installation, then restart.
 2. Search for "easy·care by Waterair"
 3. Enter your **Waterair account email and password**
 
-The integration handles authentication and token renewal automatically.
+The integration handles authentication and token renewal automatically. If your account manages several pools, a second step lets you pick which one to set up.
+
+> **Upgrading from an earlier version?** This release is backward-compatible: existing installations keep working with no action required. The next time your session needs renewing, you'll simply enter your email and password — no more copy-pasting an OAuth code.
 
 ## 🕐 Filtration schedule sensors
 
