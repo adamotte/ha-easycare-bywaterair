@@ -85,16 +85,41 @@ from .entity import (
 
 _LOGGER = logging.getLogger(__name__)
 
-# Mapping valeurs brutes API → clés de traduction HA (snake_case, [a-z0-9_]+)
+# Mapping valeurs brutes API → clés de traduction HA (snake_case, [a-z0-9_]+).
+# Source autoritative : enum NotificationCardType de l'app mobile (29 valeurs).
+# "unknown" est une sentinelle → traitée comme "aucune notification".
 _NOTIFICATION_ACTION_TO_KEY: dict[str, str] = {
     "None": "none",
+    "unknown": "none",
     "shouldBeCalibrated": "should_be_calibrated",
     "shouldBeWintered": "should_be_wintered",
     "shouldBePutBackIntoOperation": "should_be_put_back_into_operation",
     "shouldDoChlorineTreatment": "should_do_chlorine_treatment",
+    "severalInsufficientFillings": "several_insufficient_fillings",
     "pHCanShouldBeReplaced": "ph_can_should_be_replaced",
     "pHCalibrationNecessary": "ph_calibration_necessary",
-    "severalInsufficientFillings": "several_insufficient_fillings",
+    "batteryLow": "battery_low",
+    "batteryTooLowToMeasure": "battery_too_low_to_measure",
+    "gatewayConnectivityLost": "gateway_connectivity_lost",
+    "canShouldBeReplaced": "can_should_be_replaced",
+    "connectivityLost": "connectivity_lost",
+    "loraConnectivityLost": "lora_connectivity_lost",
+    "heatPumpConnectivityLost": "heat_pump_connectivity_lost",
+    "poolLevelSensorConnectivityLost": "pool_level_sensor_connectivity_lost",
+    "poolLevelSensorHighDailyThresholdExceeded": "pool_level_sensor_high_daily_threshold_exceeded",
+    "leakDetected": "leak_detected",
+    "probeUnplugged": "probe_unplugged",
+    "pumpHasStartedAlert": "pump_has_started_alert",
+    "backwashReminder": "backwash_reminder",
+    "filterCloggedAlert": "filter_clogged_alert",
+    "filterAlmostCloggedAlert": "filter_almost_clogged_alert",
+    "preFilterBasketCloggedAlert": "pre_filter_basket_clogged_alert",
+    "suctionValveClosedAlert": "suction_valve_closed_alert",
+    "dischargeValveClosedAlert": "discharge_valve_closed_alert",
+    "waterLevelLowAlert": "water_level_low_alert",
+    "electrolyserShouldBeStoppedDueToLowTemperature": "electrolyser_should_be_stopped_due_to_low_temperature",
+    "pHRegulationAlgorithmInhibited": "ph_regulation_algorithm_inhibited",
+    "pHRegulationInformation": "ph_regulation_information",
 }
 
 
@@ -261,12 +286,23 @@ class EasyCareNotificationSensor(EasyCareAC1Entity[EasyCareUserCoordinator], Sen
     def extra_state_attributes(self) -> dict[str, Any]:
         if self.coordinator.data is None:
             return {}
-        latest = self.coordinator.data.alerts.latest
-        if latest is None:
-            return {"count": 0}
+        notifications = self.coordinator.data.alerts.notifications
+        if not notifications:
+            return {"count": 0, "notifications": []}
+        latest = notifications[0]
         return {
-            "count": len(self.coordinator.data.alerts.notifications),
+            "count": len(notifications),
             "last_date": latest.date.isoformat() if latest.date else None,
+            # Liste complète (issue #9), de la plus récente à la plus ancienne.
+            # Les actions sont en clés snake_case (stables pour les automatisations),
+            # avec repli sur la valeur brute si une action inconnue apparaît.
+            "notifications": [
+                {
+                    "action": _NOTIFICATION_ACTION_TO_KEY.get(n.action, n.action),
+                    "date": n.date.isoformat() if n.date else None,
+                }
+                for n in notifications
+            ],
         }
 
 
