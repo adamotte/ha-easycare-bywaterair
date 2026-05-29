@@ -144,7 +144,8 @@
     },
     "update": {
       "bpc_firmware": {"name": "Software update"},
-      "ac1_firmware": {"name": "Software update"}
+      "ac1_firmware": {"name": "Software update"},
+      "lrpr_firmware": {"name": "Software update"}
     }
   },
   "services": {

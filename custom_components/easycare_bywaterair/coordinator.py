@@ -44,6 +44,7 @@ from .const import (
     DOMAIN,
     MODULE_TYPE_AC1,
     MODULE_TYPE_BPC,
+    MODULE_TYPE_PRESSURE,
     MODULE_TYPE_WATBOX,
     SCAN_INTERVAL_BPC,
     SCAN_INTERVAL_BPC_IDLE_FACTOR,
@@ -260,7 +261,7 @@ class EasyCareModulesCoordinator(DataUpdateCoordinator[tuple[Module, ...]]):
 
         enriched: list[Module] = []
         for module in modules:
-            if module.type in (MODULE_TYPE_BPC, MODULE_TYPE_AC1):
+            if module.type in (MODULE_TYPE_BPC, MODULE_TYPE_AC1, MODULE_TYPE_PRESSURE):
                 try:
                     fw_data = await self._client.get_firmware_update(
                         watbox.serial_number, module.short_name

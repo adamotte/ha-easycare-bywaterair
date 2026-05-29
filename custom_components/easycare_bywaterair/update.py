@@ -1,6 +1,6 @@
 """Plateforme update pour Easy-care by Waterair.
 
-Expose les entités de mise à jour logicielle pour les modules BPC et AC1.
+Expose les entités de mise à jour logicielle pour les modules BPC, AC1 et LR-PR.
 L'installation depuis HA n'est pas supportée (mise à jour BLE uniquement via l'app mobile).
 """
 
@@ -13,9 +13,9 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, MODULE_TYPE_AC1
+from .const import DOMAIN, MODULE_TYPE_AC1, MODULE_TYPE_PRESSURE
 from .coordinator import EasyCareCoordinators, EasyCareModulesCoordinator
-from .entity import EasyCareAC1Entity, EasyCareBPCEntity
+from .entity import EasyCareAC1Entity, EasyCareBPCEntity, EasyCarePressureEntity
 
 
 def _parse_device_version(data: dict[str, Any], key: str) -> str | None:
@@ -48,6 +48,9 @@ async def async_setup_entry(
 
     if coordinators.modules.get_modules_by_type(MODULE_TYPE_AC1):
         entities.append(EasyCareAC1FirmwareUpdateEntity(coordinators.modules, entry))
+
+    if coordinators.modules.get_modules_by_type(MODULE_TYPE_PRESSURE):
+        entities.append(EasyCareLRPRFirmwareUpdateEntity(coordinators.modules, entry))
 
     async_add_entities(entities)
 
@@ -124,3 +127,40 @@ class EasyCareAC1FirmwareUpdateEntity(
     def title(self) -> str | None:
         """Nom du composant mis à jour."""
         return "AC1"
+
+
+class EasyCareLRPRFirmwareUpdateEntity(
+    EasyCarePressureEntity[EasyCareModulesCoordinator],
+    UpdateEntity,
+):
+    """Mise à jour logicielle du module LR-PR."""
+
+    _attr_translation_key = "lrpr_firmware"
+
+    def __init__(self, coordinator: EasyCareModulesCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry, unique_id_suffix="lrpr_firmware_update")
+
+    @property
+    def icon(self) -> str:
+        """Icône MDI — surchargée car UpdateEntity.icon retourne None si version inconnue."""
+        return "mdi:package-up"
+
+    @property
+    def installed_version(self) -> str | None:
+        """Version logicielle actuellement installée sur le LR-PR."""
+        modules = self.coordinator.get_modules_by_type(MODULE_TYPE_PRESSURE)
+        return modules[0].software_version if modules else None
+
+    @property
+    def latest_version(self) -> str | None:
+        """Dernière version disponible — égale à installed si à jour."""
+        modules = self.coordinator.get_modules_by_type(MODULE_TYPE_PRESSURE)
+        if not modules or not modules[0].firmware_available:
+            return self.installed_version
+        version = _parse_device_version(modules[0].firmware_available, "availableUpdateVersion")
+        return version if version else self.installed_version
+
+    @property
+    def title(self) -> str | None:
+        """Nom du composant mis à jour."""
+        return "LR-PR"
