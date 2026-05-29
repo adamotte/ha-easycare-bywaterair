@@ -60,7 +60,7 @@
             },
             "data_description": {
               "pump_replacement_runtime_h": "Valeur du compteur de durée totale au moment du remplacement. Ajoute un capteur « pompe actuelle » qui compte à partir du remplacement.",
-              "pump_replacement_previous_power_w": "Sert à calculer l'énergie totale si la puissance a changé au remplacement (ex. P40 500 W → P35 150 W). Laissez à 0 si la puissance n'a pas changé.",
+              "pump_replacement_previous_power_w": "Sert à calculer l'énergie totale si la puissance a changé au remplacement (ex. P40 560 W → P35 150 W). Laissez à 0 si la puissance n'a pas changé.",
               "pump_replacement_date": "Date à laquelle la pompe a été remplacée (informatif, affiché en attribut)."
             }
           }

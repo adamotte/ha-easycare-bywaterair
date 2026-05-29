@@ -119,7 +119,7 @@ The Waterair runtime counter **never resets** when you replace the pump (e.g. un
 1. Go to **Settings → Devices & Services → easy·care by Waterair → Configure**
 2. Open the **Pump replacement** section and fill in:
    - **Pump hours before replacement** — the runtime counter value at the moment of replacement
-   - **Previous pump power** (optional) — only if the new pump has a different wattage (e.g. P40 500 W → P35 150 W)
+   - **Previous pump power** (optional) — only if the new pump has a different wattage (e.g. P40 560 W → P35 150 W)
    - **Pump replacement date** (optional, informational)
 3. Confirm — two new sensors appear on the BPC device:
    - **Operating time** (`sensor.*_pump_current_runtime`) — runtime of the current pump only, since replacement

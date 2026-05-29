@@ -60,7 +60,7 @@
             },
             "data_description": {
               "pump_replacement_runtime_h": "Total runtime counter value when the pump was replaced. Adds a \"current pump\" sensor counting from the replacement.",
-              "pump_replacement_previous_power_w": "Used to compute total energy correctly if the power changed at replacement (e.g. P40 500 W → P35 150 W). Leave at 0 if the power did not change.",
+              "pump_replacement_previous_power_w": "Used to compute total energy correctly if the power changed at replacement (e.g. P40 560 W → P35 150 W). Leave at 0 if the power did not change.",
               "pump_replacement_date": "Date the pump was replaced (informational, shown as an attribute)."
             }
           }

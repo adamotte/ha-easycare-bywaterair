@@ -572,7 +572,7 @@ class EasyCarePumpEnergySensor(EasyCareBPCEntity[EasyCareBPCCoordinator], Sensor
 
     Calculée à partir du temps total d'activation et de la puissance configurée.
     Si la pompe a été remplacée par un modèle de puissance différente (ex. kit
-    P40 500 W → P35 150 W), la part avant remplacement est valorisée à l'ancienne
+    P40 560 W → P35 150 W), la part avant remplacement est valorisée à l'ancienne
     puissance et la part après à la puissance actuelle. Compatible dashboard énergie.
     """
 
