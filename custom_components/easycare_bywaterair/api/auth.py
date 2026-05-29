@@ -60,6 +60,24 @@ _UA_BROWSER = (
 )
 
 
+def _import_curl_session() -> type:
+    """Importe curl_cffi.AsyncSession avec un message clair si la dépendance manque.
+
+    curl_cffi est indispensable pour contourner le WAF Azure Front Door (fingerprint
+    TLS). Si HA n'a pas installé la dépendance (ex. environnement de dev lancé depuis
+    les sources), on remonte une erreur explicite plutôt qu'une stacktrace brute.
+    """
+    try:
+        from curl_cffi.requests import AsyncSession as CurlSession  # noqa: PLC0415
+    except ImportError as err:
+        raise EasyCareLoginError(
+            "La dépendance 'curl_cffi' est introuvable. Installez-la dans "
+            "l'environnement Home Assistant (« pip install curl_cffi ») ou vérifiez "
+            "que l'intégration a pu installer ses dépendances."
+        ) from err
+    return CurlSession
+
+
 class EasyCareAuth:
     """Orchestrateur de l'authentification Azure B2C + bearer EasyCare.
 
@@ -138,7 +156,7 @@ class EasyCareAuth:
             EasyCareConnectionError: erreur réseau.
             EasyCareTimeoutError: timeout.
         """
-        from curl_cffi.requests import AsyncSession as CurlSession  # noqa: PLC0415
+        CurlSession = _import_curl_session()
         _LOGGER.debug("Début du login silencieux Azure B2C pour %s", email)
         authorize_url = self.build_authorize_url()
         try:
@@ -501,7 +519,7 @@ class EasyCareAuth:
         Returns:
             La réponse JSON décodée.
         """
-        from curl_cffi.requests import AsyncSession as CurlSession  # noqa: PLC0415
+        CurlSession = _import_curl_session()
         headers = {
             "User-Agent": _UA_BROWSER,
             "Content-Type": "application/x-www-form-urlencoded",
