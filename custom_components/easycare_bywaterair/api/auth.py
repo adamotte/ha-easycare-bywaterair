@@ -19,7 +19,7 @@ from typing import Any
 from urllib.parse import urlencode, quote
 
 import aiohttp
-from aiohttp import ClientError, ClientResponseError
+from aiohttp import ClientError
 
 from ..const import (
     BEARER_BASIC_AUTH,
@@ -489,7 +489,11 @@ class EasyCareAuth:
             self._bearer = None
 
     async def _post_token_endpoint(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Appelle l'endpoint /oauth2/v2.0/token d'Azure B2C.
+        """Appelle l'endpoint /oauth2/v2.0/token d'Azure B2C via curl_cffi.
+
+        Le token endpoint est sur sso.waterair.com, derrière le même Azure Front
+        Door WAF qui bloque le fingerprint TLS d'aiohttp. On impersonne donc Safari
+        comme pour les étapes du login (sinon HTTP 400 « Bad Request » du WAF).
 
         Args:
             params: paramètres OAuth2 (grant_type, code/refresh_token, etc.).
@@ -497,40 +501,37 @@ class EasyCareAuth:
         Returns:
             La réponse JSON décodée.
         """
+        from curl_cffi.requests import AsyncSession as CurlSession  # noqa: PLC0415
         headers = {
-            "User-Agent": USER_AGENT,
+            "User-Agent": _UA_BROWSER,
             "Content-Type": "application/x-www-form-urlencoded",
             "Accept": "application/json",
         }
         try:
-            async with self._session.post(
-                OAUTH_TOKEN_URL, data=params, headers=headers,
-                timeout=aiohttp.ClientTimeout(total=HTTP_TIMEOUT_AUTH),
-            ) as response:
-                body = await response.text()
-                if response.status != 200:
-                    _LOGGER.warning("OAuth /token : HTTP %s", response.status)
-                    raise EasyCareApiError(
-                        "Échec endpoint OAuth /token",
-                        status_code=response.status, body=body,
-                    )
-                if not body.strip():
-                    raise EasyCareInvalidResponseError(
-                        "Réponse OAuth vide (corps HTTP vide, endpoint Azure B2C transitoire)"
-                    )
-                try:
-                    return json.loads(body)
-                except ValueError as err:
-                    _LOGGER.warning("OAuth /token corps brut (non-JSON) : %r", body[:200])
-                    raise EasyCareInvalidResponseError(f"Réponse OAuth non-JSON : {err}") from err
-        except asyncio.TimeoutError as err:
-            raise EasyCareTimeoutError("Timeout sur l'endpoint OAuth /token") from err
-        except ClientResponseError as err:
-            raise EasyCareApiError(
-                f"Erreur HTTP sur OAuth /token : {err}", status_code=err.status,
-            ) from err
-        except ClientError as err:
+            async with CurlSession(impersonate="safari15_5") as curl:
+                response = await curl.post(
+                    OAUTH_TOKEN_URL, data=params, headers=headers,
+                    timeout=HTTP_TIMEOUT_AUTH,
+                )
+        except Exception as err:  # curl_cffi : erreurs réseau/TLS/timeout
             raise EasyCareConnectionError(f"Erreur réseau sur OAuth /token : {err}") from err
+
+        body = response.text
+        if response.status_code != 200:
+            _LOGGER.warning("OAuth /token : HTTP %s", response.status_code)
+            raise EasyCareApiError(
+                "Échec endpoint OAuth /token",
+                status_code=response.status_code, body=body,
+            )
+        if not body.strip():
+            raise EasyCareInvalidResponseError(
+                "Réponse OAuth vide (corps HTTP vide, endpoint Azure B2C transitoire)"
+            )
+        try:
+            return json.loads(body)
+        except ValueError as err:
+            _LOGGER.warning("OAuth /token corps brut (non-JSON) : %r", body[:200])
+            raise EasyCareInvalidResponseError(f"Réponse OAuth non-JSON : {err}") from err
 
     async def _notify_tokens_updated(self) -> None:
         """Notifie le callback de mise à jour des tokens si défini."""
