@@ -3,22 +3,31 @@
     "step": {
       "user": {
         "title": "easy·care by Waterair — Configuration",
-        "description": "**Étape 1 — Autorisation**\n\nCliquez **[ici]({authorize_url})** pour vous connecter avec votre compte Waterair.\n\nSi le lien ne s'ouvre pas, copiez-collez cette URL dans votre navigateur :\n`{authorize_url_raw}`\n\n**Étape 2 — Récupérer le code**\n\nAprès connexion, le navigateur affichera une erreur (redirection msauth:// — c'est normal). **Copiez l'URL complète** depuis la barre d'adresse, puis collez-la ci-dessous.\n\n> Astuce : sur mobile ou si la barre d'adresse est masquée, utilisez les outils développeur du navigateur (F12 → Réseau) pour retrouver l'URL de redirection.",
+        "description": "Entrez vos identifiants de compte Waterair.",
         "data": {
-          "auth_code": "Code d'autorisation (ou URL complète)",
-          "pool_id": "Numéro de piscine (si plusieurs)"
+          "username": "Adresse email",
+          "password": "Mot de passe"
+        }
+      },
+      "pool": {
+        "title": "easy·care — Choix de la piscine",
+        "description": "Votre compte gère plusieurs piscines. Sélectionnez celle à configurer.",
+        "data": {
+          "pool_id": "Piscine"
         }
       },
       "reauth_confirm": {
         "title": "easy·care — Ré-authentification requise",
-        "description": "Votre session a expiré.\n\nCliquez **[ici]({authorize_url})** pour vous reconnecter, ou copiez cette URL dans votre navigateur :\n`{authorize_url_raw}`\n\nAprès connexion, copiez l'URL de redirection (msauth://...) depuis la barre d'adresse et collez-la ci-dessous.",
+        "description": "Votre session a expiré. Veuillez saisir à nouveau vos identifiants Waterair.",
         "data": {
-          "auth_code": "Nouveau code d'autorisation"
+          "username": "Adresse email",
+          "password": "Mot de passe"
         }
       }
     },
     "error": {
-      "invalid_auth_code": "Code d'autorisation invalide ou expiré. Recommencez avec un code récent.",
+      "invalid_credentials": "Email ou mot de passe incorrect. Vérifiez vos identifiants Waterair.",
+      "login_failed": "Échec de l'authentification. Si la double authentification (MFA) est activée sur votre compte, elle n'est pas prise en charge. Consultez les logs pour plus de détails.",
       "cannot_connect": "Impossible de joindre les serveurs Waterair. Vérifiez votre connexion Internet.",
       "timeout": "Le serveur Waterair met trop de temps à répondre. Réessayez.",
       "invalid_pool_id": "Ce numéro de piscine n'existe pas sur votre compte.",

@@ -4,6 +4,8 @@ Hiérarchie :
     EasyCareError
     ├── EasyCareAuthError
     │   ├── EasyCareInvalidCodeError
+    │   ├── EasyCareInvalidCredentialsError
+    │   ├── EasyCareLoginError
     │   ├── EasyCareTokenExpiredError
     │   └── EasyCareUnauthorizedError
     ├── EasyCareConnectionError
@@ -25,6 +27,14 @@ class EasyCareAuthError(EasyCareError):
 
 class EasyCareInvalidCodeError(EasyCareAuthError):
     """Code d'autorisation OAuth invalide ou expiré."""
+
+
+class EasyCareInvalidCredentialsError(EasyCareAuthError):
+    """Email ou mot de passe incorrect lors du login Azure B2C."""
+
+
+class EasyCareLoginError(EasyCareAuthError):
+    """Échec du flow de login (MFA, CAPTCHA, structure de page inattendue...)."""
 
 
 class EasyCareTokenExpiredError(EasyCareAuthError):

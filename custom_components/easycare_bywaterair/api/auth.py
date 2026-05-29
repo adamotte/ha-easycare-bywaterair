@@ -12,13 +12,14 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import urlencode, quote
 
 import aiohttp
-from aiohttp import ClientError, ClientResponseError
+from aiohttp import ClientError
 
 from ..const import (
     BEARER_BASIC_AUTH,
@@ -40,7 +41,9 @@ from .exceptions import (
     EasyCareAuthError,
     EasyCareConnectionError,
     EasyCareInvalidCodeError,
+    EasyCareInvalidCredentialsError,
     EasyCareInvalidResponseError,
+    EasyCareLoginError,
     EasyCareTimeoutError,
     EasyCareTokenExpiredError,
 )
@@ -49,6 +52,12 @@ from .models import BearerToken, OAuthTokens
 _LOGGER = logging.getLogger(__name__)
 
 TokensUpdatedCallback = Callable[[OAuthTokens, BearerToken], Awaitable[None]]
+
+# User-Agent Safari iOS — cohérent avec l'app Waterair (iPad) et le profil TLS impersonné.
+_UA_BROWSER = (
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 16_3 like Mac OS X) "
+    "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Mobile/15E148 Safari/604.1"
+)
 
 
 class EasyCareAuth:
@@ -109,6 +118,186 @@ class EasyCareAuth:
             "response_mode": "query",
         }
         return f"{OAUTH_AUTHORIZE_URL}?{urlencode(params)}"
+
+    async def login_with_credentials(self, email: str, password: str) -> OAuthTokens:
+        """Authentifie silencieusement via curl_cffi qui contourne le WAF Azure Front Door.
+
+        curl_cffi impersonne le profil TLS Safari iOS, ce qui permet de passer le
+        fingerprinting TLS d'Azure Front Door qui bloque les clients Python standard.
+
+        Args:
+            email   : adresse email du compte Waterair.
+            password: mot de passe du compte Waterair.
+
+        Returns:
+            Les tokens OAuth obtenus après login réussi.
+
+        Raises:
+            EasyCareInvalidCredentialsError: email ou mot de passe incorrect.
+            EasyCareLoginError: flow de login inattendu (MFA, CAPTCHA, page inconnue).
+            EasyCareConnectionError: erreur réseau.
+            EasyCareTimeoutError: timeout.
+        """
+        from curl_cffi.requests import AsyncSession as CurlSession  # noqa: PLC0415
+        _LOGGER.debug("Début du login silencieux Azure B2C pour %s", email)
+        authorize_url = self.build_authorize_url()
+        try:
+            async with CurlSession(impersonate="safari15_5") as curl:
+                settings, page_url = await self._fetch_b2c_settings(curl, authorize_url)
+                await self._post_selfasserted(curl, settings, page_url, email, password)
+                redirect_url = await self._get_confirmed(curl, settings, page_url)
+        except (EasyCareInvalidCredentialsError, EasyCareLoginError,
+                EasyCareTimeoutError, EasyCareConnectionError):
+            raise
+        except Exception as err:
+            raise EasyCareLoginError(f"Erreur inattendue pendant le login : {err}") from err
+        code = self._extract_code_from_url(redirect_url)
+        return await self.exchange_code(code)
+
+    @staticmethod
+    async def _fetch_b2c_settings(curl: Any, authorize_url: str) -> tuple[dict, str]:
+        """Charge la page Azure B2C et extrait SETTINGS depuis le JS inline.
+
+        Returns:
+            Tuple (settings_dict, url_finale_après_redirections).
+        """
+        headers = {
+            "User-Agent": _UA_BROWSER,
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.8",
+            "Sec-Fetch-Site": "none",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Dest": "document",
+        }
+        resp = await curl.get(
+            authorize_url, headers=headers, allow_redirects=True,
+            timeout=HTTP_TIMEOUT_AUTH,
+        )
+        if resp.status_code != 200:
+            raise EasyCareLoginError(
+                f"Page Azure B2C inaccessible (HTTP {resp.status_code})"
+            )
+        m = re.search(r"var SETTINGS = (\{.*?\});", resp.text, re.DOTALL)
+        if not m:
+            raise EasyCareLoginError(
+                "SETTINGS introuvable dans la page Azure B2C — structure inattendue"
+            )
+        try:
+            settings = json.loads(m.group(1))
+        except json.JSONDecodeError as err:
+            raise EasyCareLoginError(f"SETTINGS JSON invalide : {err}") from err
+        return settings, str(resp.url)
+
+    @staticmethod
+    async def _post_selfasserted(
+        curl: Any, settings: dict, page_url: str, email: str, password: str
+    ) -> None:
+        """Soumet email/password au endpoint SelfAsserted et vérifie le statut JSON.
+
+        Raises:
+            EasyCareInvalidCredentialsError: identifiants incorrects (AADB2C90054).
+            EasyCareLoginError: autre erreur B2C (MFA, etc.).
+        """
+        tenant = settings["hosts"]["tenant"]
+        trans_id = settings["transId"]
+        policy = settings["hosts"]["policy"]
+        csrf = settings["csrf"]
+        sa_url = f"https://sso.waterair.com{tenant}/SelfAsserted?tx={trans_id}&p={policy}"
+        payload = f"request_type=RESPONSE&signInName={quote(email)}&password={quote(password)}"
+        headers = {
+            "User-Agent": _UA_BROWSER,
+            "Accept": "application/json, text/javascript, */*; q=0.01",
+            "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.8",
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+            "X-CSRF-TOKEN": csrf,
+            "X-Requested-With": "XMLHttpRequest",
+            "Origin": "https://sso.waterair.com",
+            "Referer": page_url,
+            "Sec-Fetch-Site": "same-origin",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Dest": "empty",
+        }
+        resp = await curl.post(
+            sa_url, data=payload, headers=headers, allow_redirects=False,
+            timeout=HTTP_TIMEOUT_AUTH,
+        )
+        if resp.status_code != 200:
+            raise EasyCareLoginError(
+                f"SelfAsserted : réponse inattendue HTTP {resp.status_code}"
+            )
+        try:
+            j = json.loads(resp.text)
+        except json.JSONDecodeError as err:
+            raise EasyCareLoginError(f"SelfAsserted : réponse non-JSON : {err}") from err
+        if j.get("status") == "400":
+            error_code = j.get("errorCode", "")
+            if error_code == "AADB2C90054":
+                raise EasyCareInvalidCredentialsError("Email ou mot de passe incorrect")
+            raise EasyCareLoginError(
+                f"Échec SelfAsserted (code {error_code}) : {j.get('message', j)}"
+            )
+        if j.get("status") != "200":
+            raise EasyCareLoginError(f"SelfAsserted : statut inattendu : {j}")
+        _LOGGER.debug("SelfAsserted : identifiants acceptés")
+
+    @staticmethod
+    async def _get_confirmed(curl: Any, settings: dict, page_url: str) -> str:
+        """GET confirmed → intercepte la redirection 302 vers msauth://.
+
+        Returns:
+            L'URL msauth://... contenant le code OAuth.
+        """
+        tenant = settings["hosts"]["tenant"]
+        policy = settings["hosts"]["policy"]
+        trans_id = settings["transId"]
+        csrf = settings["csrf"]
+        api = settings.get("api", "")
+        confirmed_url = (
+            f"https://sso.waterair.com{tenant}/api/{api}/confirmed"
+            f"?rememberMe=false&csrf_token={quote(csrf)}&tx={trans_id}&p={policy}"
+        )
+        headers = {
+            "User-Agent": _UA_BROWSER,
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.8",
+            "Referer": page_url,
+            "Sec-Fetch-Site": "same-origin",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Dest": "document",
+        }
+        resp = await curl.get(
+            confirmed_url, headers=headers, allow_redirects=False,
+            timeout=HTTP_TIMEOUT_AUTH,
+        )
+        location = resp.headers.get("Location", "")
+        if resp.status_code in (301, 302, 303, 307, 308) and (
+            location.startswith("msauth") or "code=" in location
+        ):
+            _LOGGER.debug("Code OAuth intercepté depuis confirmed")
+            return location
+        raise EasyCareLoginError(
+            f"Confirmed : redirection msauth:// non interceptée "
+            f"(HTTP {resp.status_code}, Location={location[:80]!r})"
+        )
+
+    @staticmethod
+    def _extract_code_from_url(redirect_url: str) -> str:
+        """Extrait le code OAuth depuis l'URL de redirection msauth://.
+
+        Raises:
+            EasyCareLoginError: paramètre code= absent de l'URL.
+        """
+        if "code=" not in redirect_url:
+            raise EasyCareLoginError(
+                f"Paramètre code= absent de l'URL de redirection : {redirect_url[:120]}"
+            )
+        try:
+            after = redirect_url.split("code=", 1)[1]
+            return after.split("&", 1)[0].strip()
+        except IndexError as err:
+            raise EasyCareLoginError(
+                f"Impossible d'extraire le code OAuth : {redirect_url[:120]}"
+            ) from err
 
     async def exchange_code(self, code: str) -> OAuthTokens:
         """Échange un code d'autorisation OAuth2 contre des tokens Azure.
@@ -300,7 +489,11 @@ class EasyCareAuth:
             self._bearer = None
 
     async def _post_token_endpoint(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Appelle l'endpoint /oauth2/v2.0/token d'Azure B2C.
+        """Appelle l'endpoint /oauth2/v2.0/token d'Azure B2C via curl_cffi.
+
+        Le token endpoint est sur sso.waterair.com, derrière le même Azure Front
+        Door WAF qui bloque le fingerprint TLS d'aiohttp. On impersonne donc Safari
+        comme pour les étapes du login (sinon HTTP 400 « Bad Request » du WAF).
 
         Args:
             params: paramètres OAuth2 (grant_type, code/refresh_token, etc.).
@@ -308,40 +501,37 @@ class EasyCareAuth:
         Returns:
             La réponse JSON décodée.
         """
+        from curl_cffi.requests import AsyncSession as CurlSession  # noqa: PLC0415
         headers = {
-            "User-Agent": USER_AGENT,
+            "User-Agent": _UA_BROWSER,
             "Content-Type": "application/x-www-form-urlencoded",
             "Accept": "application/json",
         }
         try:
-            async with self._session.post(
-                OAUTH_TOKEN_URL, data=params, headers=headers,
-                timeout=aiohttp.ClientTimeout(total=HTTP_TIMEOUT_AUTH),
-            ) as response:
-                body = await response.text()
-                if response.status != 200:
-                    _LOGGER.warning("OAuth /token : HTTP %s", response.status)
-                    raise EasyCareApiError(
-                        "Échec endpoint OAuth /token",
-                        status_code=response.status, body=body,
-                    )
-                if not body.strip():
-                    raise EasyCareInvalidResponseError(
-                        "Réponse OAuth vide (corps HTTP vide, endpoint Azure B2C transitoire)"
-                    )
-                try:
-                    return json.loads(body)
-                except ValueError as err:
-                    _LOGGER.warning("OAuth /token corps brut (non-JSON) : %r", body[:200])
-                    raise EasyCareInvalidResponseError(f"Réponse OAuth non-JSON : {err}") from err
-        except asyncio.TimeoutError as err:
-            raise EasyCareTimeoutError("Timeout sur l'endpoint OAuth /token") from err
-        except ClientResponseError as err:
-            raise EasyCareApiError(
-                f"Erreur HTTP sur OAuth /token : {err}", status_code=err.status,
-            ) from err
-        except ClientError as err:
+            async with CurlSession(impersonate="safari15_5") as curl:
+                response = await curl.post(
+                    OAUTH_TOKEN_URL, data=params, headers=headers,
+                    timeout=HTTP_TIMEOUT_AUTH,
+                )
+        except Exception as err:  # curl_cffi : erreurs réseau/TLS/timeout
             raise EasyCareConnectionError(f"Erreur réseau sur OAuth /token : {err}") from err
+
+        body = response.text
+        if response.status_code != 200:
+            _LOGGER.warning("OAuth /token : HTTP %s", response.status_code)
+            raise EasyCareApiError(
+                "Échec endpoint OAuth /token",
+                status_code=response.status_code, body=body,
+            )
+        if not body.strip():
+            raise EasyCareInvalidResponseError(
+                "Réponse OAuth vide (corps HTTP vide, endpoint Azure B2C transitoire)"
+            )
+        try:
+            return json.loads(body)
+        except ValueError as err:
+            _LOGGER.warning("OAuth /token corps brut (non-JSON) : %r", body[:200])
+            raise EasyCareInvalidResponseError(f"Réponse OAuth non-JSON : {err}") from err
 
     async def _notify_tokens_updated(self) -> None:
         """Notifie le callback de mise à jour des tokens si défini."""
