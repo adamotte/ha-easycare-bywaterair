@@ -19,8 +19,9 @@ Expose tous les capteurs en lecture seule, répartis sur 4 appareils :
   ├── sensor.easycare_bywaterair_spot_mode       (si voie 1 présente)
   └── sensor.easycare_bywaterair_escalight_mode  (si voie 2 présente)
 
-  Appareil LR-PR (si présent) — coordinator USER
-  └── sensor.easycare_bywaterair_pressure        (pression filtration)
+  Appareil LR-PR (si présent) — coordinator USER/MODULES
+  ├── sensor.easycare_bywaterair_pressure        (pression filtration)
+  └── sensor.easycare_bywaterair_battery_lrpr
 
   Appareil WATBOX — coordinator USER
   ├── sensor.easycare_bywaterair_owner           (propriétaire compte)
@@ -144,7 +145,10 @@ async def async_setup_entry(
 
     pressure_modules = coords.modules.get_modules_by_type(MODULE_TYPE_PRESSURE)
     if pressure_modules:
-        sensors.append(EasyCarePressureSensor(coords.user, entry, pressure_modules[0].static_pressure))
+        sensors.extend([
+            EasyCarePressureSensor(coords.user, entry, pressure_modules[0].static_pressure),
+            EasyCareLRPRBatterySensor(coords.modules, entry),
+        ])
 
     sensors.extend([
         EasyCareOwnerSensor(coords.user, entry),
@@ -335,6 +339,54 @@ class EasyCareAC1BatterySensor(
             "raw_value": ac1.battery_level,
             "scale_max": self.BATTERY_MAX,
             "serial_number": ac1.serial_number,
+        }
+
+
+class EasyCareLRPRBatterySensor(
+    EasyCarePressureEntity[EasyCareModulesCoordinator], SensorEntity
+):
+    """Niveau de batterie du capteur de pression LR-PR.
+
+    L'API retourne la valeur sur une échelle 0-5 (identique à l'AC1).
+    Ajustez BATTERY_MAX si la valeur affichée ne correspond pas à la réalité.
+    """
+
+    BATTERY_MAX: float = 5.0
+
+    _attr_translation_key = "battery_lrpr"
+    _attr_device_class = SensorDeviceClass.BATTERY
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator: EasyCareModulesCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry, unique_id_suffix="battery_lrpr")
+
+    def _get_lrpr(self):
+        """Récupère le module LR-PR ou None."""
+        modules = self.coordinator.get_modules_by_type(MODULE_TYPE_PRESSURE)
+        return modules[0] if modules else None
+
+    @property
+    def native_value(self) -> int | None:
+        """Niveau batterie en pourcentage."""
+        lrpr = self._get_lrpr()
+        if lrpr is None or lrpr.battery_level is None:
+            return None
+        raw = float(lrpr.battery_level)
+        if raw <= self.BATTERY_MAX:
+            return int(min(100, max(0, raw / self.BATTERY_MAX * 100)))
+        return int(min(100, max(0, raw)))
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        lrpr = self._get_lrpr()
+        if lrpr is None:
+            return {}
+        return {
+            "raw_value": lrpr.battery_level,
+            "scale_max": self.BATTERY_MAX,
+            "serial_number": lrpr.serial_number,
         }
 
 

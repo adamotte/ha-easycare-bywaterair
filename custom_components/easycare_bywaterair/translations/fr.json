@@ -113,6 +113,7 @@
       },
       "treatment": {"name": "Traitement actif"},
       "battery_ac1": {"name": "Batterie AC1"},
+      "battery_lrpr": {"name": "Batterie LR-PR"},
       "pump_state": {
         "name": "État pompe",
         "state": {"on": "Marche", "off": "Arrêt"}
