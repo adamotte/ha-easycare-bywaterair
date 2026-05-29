@@ -199,6 +199,10 @@ logger:
     custom_components.easycare_bywaterair: debug
 ```
 
+## 🙏 Acknowledgements
+
+Thanks to [yyrkoon94](https://github.com/yyrkoon94/ha-easycare-waterair) for building the first Home Assistant integration for the easy·care ecosystem.
+
 ## 📄 License
 
 MIT

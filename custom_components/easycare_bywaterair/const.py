@@ -78,6 +78,8 @@ BPC_INDEX_ESCALIGHT: Final = 2
 
 BPC_ACTION_OFF: Final = 1
 BPC_ACTION_ON: Final = 2
+# Hypothèse (origin status = code action) : on=2 → origin=2, donc boost = action 3 → origin=3.
+BPC_ACTION_BOOST: Final = 3
 
 DEFAULT_DURATION_PUMP_HOURS: Final = 1
 DEFAULT_DURATION_LIGHT_HOURS: Final = 1

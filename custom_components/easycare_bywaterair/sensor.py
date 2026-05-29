@@ -19,8 +19,9 @@ Expose tous les capteurs en lecture seule, répartis sur 4 appareils :
   ├── sensor.easycare_bywaterair_spot_mode       (si voie 1 présente)
   └── sensor.easycare_bywaterair_escalight_mode  (si voie 2 présente)
 
-  Appareil LR-PR (si présent) — coordinator USER
-  └── sensor.easycare_bywaterair_pressure        (pression filtration)
+  Appareil LR-PR (si présent) — coordinator USER/MODULES
+  ├── sensor.easycare_bywaterair_pressure        (pression filtration)
+  └── sensor.easycare_bywaterair_battery_lrpr
 
   Appareil WATBOX — coordinator USER
   ├── sensor.easycare_bywaterair_owner           (propriétaire compte)
@@ -144,7 +145,10 @@ async def async_setup_entry(
 
     pressure_modules = coords.modules.get_modules_by_type(MODULE_TYPE_PRESSURE)
     if pressure_modules:
-        sensors.append(EasyCarePressureSensor(coords.user, entry, pressure_modules[0].static_pressure))
+        sensors.extend([
+            EasyCarePressureSensor(coords.user, entry, pressure_modules[0].static_pressure),
+            EasyCareLRPRBatterySensor(coords.modules, entry),
+        ])
 
     sensors.extend([
         EasyCareOwnerSensor(coords.user, entry),
@@ -338,6 +342,54 @@ class EasyCareAC1BatterySensor(
         }
 
 
+class EasyCareLRPRBatterySensor(
+    EasyCarePressureEntity[EasyCareModulesCoordinator], SensorEntity
+):
+    """Niveau de batterie du capteur de pression LR-PR.
+
+    L'API retourne la valeur sur une échelle 0-5 (identique à l'AC1).
+    Ajustez BATTERY_MAX si la valeur affichée ne correspond pas à la réalité.
+    """
+
+    BATTERY_MAX: float = 5.0
+
+    _attr_translation_key = "battery_lrpr"
+    _attr_device_class = SensorDeviceClass.BATTERY
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator: EasyCareModulesCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry, unique_id_suffix="battery_lrpr")
+
+    def _get_lrpr(self):
+        """Récupère le module LR-PR ou None."""
+        modules = self.coordinator.get_modules_by_type(MODULE_TYPE_PRESSURE)
+        return modules[0] if modules else None
+
+    @property
+    def native_value(self) -> int | None:
+        """Niveau batterie en pourcentage."""
+        lrpr = self._get_lrpr()
+        if lrpr is None or lrpr.battery_level is None:
+            return None
+        raw = float(lrpr.battery_level)
+        if raw <= self.BATTERY_MAX:
+            return int(min(100, max(0, raw / self.BATTERY_MAX * 100)))
+        return int(min(100, max(0, raw)))
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        lrpr = self._get_lrpr()
+        if lrpr is None:
+            return {}
+        return {
+            "raw_value": lrpr.battery_level,
+            "scale_max": self.BATTERY_MAX,
+            "serial_number": lrpr.serial_number,
+        }
+
+
 class EasyCarePumpStateSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], SensorEntity):
     """État textuel de la pompe (on/off) avec temps restant en attribut."""
 
@@ -523,27 +575,26 @@ class EasyCareBoostRemainingSensor(EasyCareBPCEntity[EasyCareBPCCoordinator], Se
 
     @property
     def native_value(self) -> str | None:
-        if self.coordinator.data is None:
+        data = self.coordinator.data
+        if data is None:
             return None
-        # Source primaire : BPCInput (endpoint status BPC), seul à jour pour le boost programme
-        pump = self.coordinator.data.get_input(BPC_INDEX_PUMP)
-        if pump is not None and pump.is_boosting:
+        if not data.is_boost_active:
+            return "00:00"
+        # Source primaire : BPCInput (endpoint status BPC), à jour quand la pompe tourne.
+        pump = data.get_input(BPC_INDEX_PUMP)
+        if pump is not None and pump.remaining_time not in (None, "", "00:00"):
             return pump.remaining_time
-        # Repli : pool_status (ne reflète pas les boosts programme, mais vaut mieux que rien)
-        if self.coordinator.data.pool_status is not None:
-            return self.coordinator.data.pool_status.boost_remaining_time
+        # Repli : durée restante du programme pompe (boost déclenché via l'app).
+        if data.pump_program_remaining_minutes:
+            mins = data.pump_program_remaining_minutes
+            return f"{mins // 60:02d}:{mins % 60:02d}"
         return "00:00"
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         if self.coordinator.data is None:
             return {"boost_active": False}
-        pump = self.coordinator.data.get_input(BPC_INDEX_PUMP)
-        if pump is not None:
-            return {"boost_active": pump.is_boosting}
-        if self.coordinator.data.pool_status is not None:
-            return {"boost_active": self.coordinator.data.pool_status.is_boosting}
-        return {"boost_active": False}
+        return {"boost_active": self.coordinator.data.is_boost_active}
 
 
 class EasyCarePressureSensor(EasyCarePressureEntity[EasyCareUserCoordinator], SensorEntity):
