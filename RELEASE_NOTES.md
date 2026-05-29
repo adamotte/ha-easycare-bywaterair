@@ -1,16 +1,15 @@
-**Boost de filtration — vrai mode Boost**
+**Configuration simplifiée : email + mot de passe**
 
-Le bouton Boost déclenche désormais le **véritable mode Boost** de la pompe (visible comme « Boost » dans l'application mobile Waterair), et non plus une simple marche forcée. Le capteur **Temps boost restant** se met à jour et décompte correctement, et l'annulation se synchronise dans les deux sens (HA ↔ app).
+Fini le copier-coller du code OAuth ! La configuration se fait désormais avec **votre simple email et mot de passe Waterair** — l'intégration gère silencieusement tout le flow d'authentification Azure B2C en arrière-plan.
+
+- Plus besoin d'ouvrir un navigateur ni de copier une URL `msauth://`.
+- Si votre compte gère **plusieurs piscines**, une seconde étape vous laisse choisir laquelle configurer (liste déroulante). Les comptes mono-piscine ne voient pas cette étape.
+- Le renouvellement de session (ré-authentification) se fait avec le même formulaire email/mot de passe.
+
+**Mise à jour rétrocompatible :** les installations existantes continuent de fonctionner sans aucune action. Lors du prochain renouvellement de session, il suffira de saisir email + mot de passe — plus besoin du code OAuth.
 
 ---
 
-**Capteur de pression LR-PR (issue #8)**
+**Réglage de la durée des lumières**
 
-- Nouveau capteur de **niveau de batterie** du capteur de pression LR-PR.
-- Nouvelle entité de **mise à jour firmware** pour le LR-PR (notification uniquement, visible sous Paramètres → Mises à jour).
-
----
-
-**Correctifs**
-
-- Icône correcte (`mdi:package-up`) pour les entités de mise à jour.
+Les durées d'éclairage (projecteur / éclairage des marches) se règlent maintenant via un curseur de 1 à 6 h (pas de 0,5 h).

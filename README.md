@@ -44,7 +44,8 @@ Home Assistant integration for pools equipped with the
 - ⚡ **Boost**: 4h / 12h / 24h / 36h / 48h / 72h / cancel
 
 ### Technical highlights
-- 🔐 **Automatic token refresh** — no more manual re-entry every 2 months
+- 🔐 **Simple authentication** — email and password, handled entirely by the integration
+- 🔄 **Automatic token renewal** — no manual re-entry required
 - 🏛️ **Standard HA architecture**: ConfigEntry, DataUpdateCoordinator, Device Registry
 - 📱 **UI-based configuration** (no YAML)
 - 🌐 **Multi-language** (French, English)
@@ -68,13 +69,11 @@ directory of your HA installation, then restart.
 
 1. **Settings → Devices & Services → Add Integration**
 2. Search for "easy·care by Waterair"
-3. Click the authorization link displayed
-4. Log in with your Waterair account
-5. The browser will show an error (`msauth://` redirect) — this is normal
-6. **Copy the full URL** from the address bar (or just the value after `code=`)
-7. Paste it into HA and confirm
+3. Enter your **Waterair account email and password**
 
-The integration then handles automatic token renewal.
+The integration handles authentication and token renewal automatically. If your account manages several pools, a second step lets you pick which one to set up.
+
+> **Upgrading from an earlier version?** This release is backward-compatible: existing installations keep working with no action required. The next time your session needs renewing, you'll simply enter your email and password — no more copy-pasting an OAuth code.
 
 ## 🕐 Filtration schedule sensors
 

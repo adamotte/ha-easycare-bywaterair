@@ -3,22 +3,31 @@
     "step": {
       "user": {
         "title": "easy·care by Waterair — Setup",
-        "description": "**Step 1 — Authorize**\n\nClick **[here]({authorize_url})** to log in with your Waterair account.\n\nIf the link does not open, copy and paste this URL into your browser:\n`{authorize_url_raw}`\n\n**Step 2 — Copy the code**\n\nAfter login, the browser will show an error (msauth:// redirect — this is normal). **Copy the full URL** from the address bar, then paste it below.\n\n> Tip: on mobile or if the address bar is hidden, use your browser's developer tools (F12 → Network) to find the redirect URL.",
+        "description": "Enter your Waterair account credentials.",
         "data": {
-          "auth_code": "Authorization code (or full URL)",
-          "pool_id": "Pool number (if multiple pools)"
+          "username": "Email address",
+          "password": "Password"
+        }
+      },
+      "pool": {
+        "title": "easy·care — Pool selection",
+        "description": "Your account manages several pools. Select the one to configure.",
+        "data": {
+          "pool_id": "Pool"
         }
       },
       "reauth_confirm": {
         "title": "easy·care — Re-authentication needed",
-        "description": "Your session has expired.\n\nClick **[here]({authorize_url})** to log in again, or copy this URL into your browser:\n`{authorize_url_raw}`\n\nAfter login, copy the redirect URL (msauth://...) from the address bar and paste it below.",
+        "description": "Your session has expired. Please enter your Waterair credentials again.",
         "data": {
-          "auth_code": "New authorization code"
+          "username": "Email address",
+          "password": "Password"
         }
       }
     },
     "error": {
-      "invalid_auth_code": "Invalid or expired authorization code. Please try again with a fresh code.",
+      "invalid_credentials": "Incorrect email or password. Please check your Waterair account credentials.",
+      "login_failed": "Authentication failed. If you have two-factor authentication (MFA) enabled on your account, it is not supported. Check the logs for details.",
       "cannot_connect": "Cannot reach Waterair servers. Check your internet connection.",
       "timeout": "The Waterair server took too long to respond. Try again.",
       "invalid_pool_id": "This pool number does not exist on your account.",

@@ -138,6 +138,28 @@ class EasyCareClient:
             self._pool_db_id = pool.id
         return client, pool, metrics, alerts, treatment
 
+    async def list_pools(self) -> list[str]:
+        """Liste les piscines du compte pour le config flow.
+
+        Utilisé à la configuration pour décider s'il faut demander à l'utilisateur
+        de choisir une piscine (compte multi-piscines) ou non (cas le plus courant).
+
+        Returns:
+            Liste ordonnée de libellés lisibles, un par piscine.
+            L'index 0 correspond à pool_id=1, l'index 1 à pool_id=2, etc.
+        """
+        data = await self._request("GET", API_HOST_EASYCARE, API_PATH_GET_USER)
+        pools = data.get("pools") or []
+        labels: list[str] = []
+        for i, pool in enumerate(pools, start=1):
+            model = pool.get("model") or "Piscine"
+            address = pool.get("address") or ""
+            label = f"{i} — {model}"
+            if address:
+                label += f" ({address})"
+            labels.append(label)
+        return labels
+
     async def get_modules(self) -> tuple[Module, ...]:
         """Récupère la liste des modules de la piscine sélectionnée.
 
