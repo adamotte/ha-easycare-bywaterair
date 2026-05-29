@@ -13,9 +13,3 @@ Fini le copier-coller du code OAuth ! La configuration se fait désormais avec *
 **Réglage de la durée des lumières**
 
 Les durées d'éclairage (projecteur / éclairage des marches) se règlent maintenant via un curseur de 1 à 6 h (pas de 0,5 h).
-
----
-
-**Note technique**
-
-L'authentification utilise désormais la librairie `curl_cffi` pour contourner le pare-feu (WAF) des serveurs Waterair. ⚠️ Les installations sur **ARM 32 bits (armhf)** ne sont pas compatibles — cela ne concerne que d'anciennes installations Raspberry Pi en OS 32 bits.
