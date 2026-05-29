@@ -117,7 +117,10 @@
           "should_do_chlorine_treatment": "Chlorine treatment recommended",
           "ph_can_should_be_replaced": "pH container to replace",
           "ph_calibration_necessary": "pH calibration required",
-          "several_insufficient_fillings": "Several insufficient fillings"
+          "several_insufficient_fillings": "Several insufficient fillings",
+          "battery_low": "Low battery",
+          "battery_too_low_to_measure": "Battery too low to measure",
+          "gateway_connectivity_lost": "Gateway connectivity lost"
         }
       },
       "treatment": {"name": "Active treatment"},

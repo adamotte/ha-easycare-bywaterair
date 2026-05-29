@@ -117,7 +117,10 @@
           "should_do_chlorine_treatment": "Traitement chlore recommandé",
           "ph_can_should_be_replaced": "Bidon pH à remplacer",
           "ph_calibration_necessary": "Calibration pH requise",
-          "several_insufficient_fillings": "Plusieurs remplissages insuffisants"
+          "several_insufficient_fillings": "Plusieurs remplissages insuffisants",
+          "battery_low": "Batterie faible",
+          "battery_too_low_to_measure": "Batterie trop faible pour mesurer",
+          "gateway_connectivity_lost": "Connexion passerelle perdue"
         }
       },
       "treatment": {"name": "Traitement actif"},

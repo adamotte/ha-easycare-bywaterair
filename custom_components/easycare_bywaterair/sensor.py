@@ -95,6 +95,9 @@ _NOTIFICATION_ACTION_TO_KEY: dict[str, str] = {
     "pHCanShouldBeReplaced": "ph_can_should_be_replaced",
     "pHCalibrationNecessary": "ph_calibration_necessary",
     "severalInsufficientFillings": "several_insufficient_fillings",
+    "batteryLow": "battery_low",
+    "batteryTooLowToMeasure": "battery_too_low_to_measure",
+    "gatewayConnectivityLost": "gateway_connectivity_lost",
 }
 
 
@@ -261,12 +264,23 @@ class EasyCareNotificationSensor(EasyCareAC1Entity[EasyCareUserCoordinator], Sen
     def extra_state_attributes(self) -> dict[str, Any]:
         if self.coordinator.data is None:
             return {}
-        latest = self.coordinator.data.alerts.latest
-        if latest is None:
-            return {"count": 0}
+        notifications = self.coordinator.data.alerts.notifications
+        if not notifications:
+            return {"count": 0, "notifications": []}
+        latest = notifications[0]
         return {
-            "count": len(self.coordinator.data.alerts.notifications),
+            "count": len(notifications),
             "last_date": latest.date.isoformat() if latest.date else None,
+            # Liste complète (issue #9), de la plus récente à la plus ancienne.
+            # Les actions sont en clés snake_case (stables pour les automatisations),
+            # avec repli sur la valeur brute si une action inconnue apparaît.
+            "notifications": [
+                {
+                    "action": _NOTIFICATION_ACTION_TO_KEY.get(n.action, n.action),
+                    "date": n.date.isoformat() if n.date else None,
+                }
+                for n in notifications
+            ],
         }
 
 
