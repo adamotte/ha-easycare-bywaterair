@@ -14,7 +14,10 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from homeassistant.components.persistent_notification import async_create as pn_create
+from homeassistant.components.persistent_notification import (
+    async_create as pn_create,
+    async_dismiss as pn_dismiss,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
@@ -56,15 +59,130 @@ _LOGGER = logging.getLogger(__name__)
 
 # Messages lisibles pour les notifications persistantes HA.
 # Clé = valeur brute du champ `action` retournée par l'API Waterair.
-_POOL_ACTION_MESSAGES: dict[str, str] = {
-    "shouldBeCalibrated": "Your AC1 analyser should be calibrated. Open the Waterair app to proceed.",
-    "shouldBeWintered": "Your pool should be winterized. Open the Waterair app for the procedure.",
-    "shouldBePutBackIntoOperation": "Your pool should be put back into operation. Open the Waterair app for the procedure.",
-    "shouldDoChlorineTreatment": "A chlorine treatment is recommended for your pool.",
-    "pHCanShouldBeReplaced": "Your pH container should be replaced.",
-    "pHCalibrationNecessary": "pH calibration is required for your pool.",
-    "severalInsufficientFillings": "Several insufficient water fillings have been detected.",
+# Messages des notifications persistantes HA, par action (clé = valeur API camelCase).
+# Phrases reprises/adaptées des chaînes officielles de l'app mobile Waterair.
+# Localisées FR/EN selon la langue de l'instance Home Assistant.
+_POOL_ACTION_MESSAGES: dict[str, dict[str, str]] = {
+    "shouldBeCalibrated": {
+        "fr": "Votre AC1 devrait être calibré.",
+        "en": "Your AC1 should be calibrated.",
+    },
+    "shouldBeWintered": {
+        "fr": "Votre AC1 devrait être hiverné.",
+        "en": "Your AC1 should be wintered.",
+    },
+    "shouldBePutBackIntoOperation": {
+        "fr": "Votre piscine devrait être remise en service.",
+        "en": "Your pool should be put back into operation.",
+    },
+    "shouldDoChlorineTreatment": {
+        "fr": "Un traitement chlore est recommandé pour votre piscine.",
+        "en": "A chlorine treatment is recommended for your pool.",
+    },
+    "severalInsufficientFillings": {
+        "fr": "Plusieurs remplissages insuffisants ont été détectés.",
+        "en": "Several insufficient fillings have been detected.",
+    },
+    "pHCanShouldBeReplaced": {
+        "fr": "Le bidon de pH devrait être remplacé.",
+        "en": "The pH can should be replaced.",
+    },
+    "pHCalibrationNecessary": {
+        "fr": "Une calibration du pH est nécessaire.",
+        "en": "pH calibration is required.",
+    },
+    "batteryLow": {
+        "fr": "Les piles sont bientôt vides.",
+        "en": "The batteries are running low.",
+    },
+    "batteryTooLowToMeasure": {
+        "fr": "Les piles de votre AC1 sont trop faibles, les mesures sont suspendues.",
+        "en": "The battery is too low, measurements are suspended until you change it.",
+    },
+    "gatewayConnectivityLost": {
+        "fr": "La WATBOX est déconnectée.",
+        "en": "The gateway (WATBOX) has been disconnected.",
+    },
+    "canShouldBeReplaced": {
+        "fr": "Le bidon devrait être remplacé.",
+        "en": "The can should be replaced.",
+    },
+    "connectivityLost": {
+        "fr": "La connexion a été perdue.",
+        "en": "Connectivity has been lost.",
+    },
+    "loraConnectivityLost": {
+        "fr": "La connexion LoRa a été perdue.",
+        "en": "LoRa connectivity has been lost.",
+    },
+    "heatPumpConnectivityLost": {
+        "fr": "La connexion avec la pompe à chaleur a été perdue.",
+        "en": "Connection to the heat pump has been lost.",
+    },
+    "poolLevelSensorConnectivityLost": {
+        "fr": "La connexion avec le capteur de niveau d'eau a été perdue.",
+        "en": "Connection to the water level sensor has been lost.",
+    },
+    "poolLevelSensorHighDailyThresholdExceeded": {
+        "fr": "Le seuil quotidien de niveau d'eau a été dépassé.",
+        "en": "The daily water level threshold has been exceeded.",
+    },
+    "leakDetected": {
+        "fr": "Une fuite a été détectée.",
+        "en": "A leak has been detected.",
+    },
+    "probeUnplugged": {
+        "fr": "Une sonde semble débranchée. Vérifiez son raccordement.",
+        "en": "A probe appears to be unplugged. Check its connection.",
+    },
+    "pumpHasStartedAlert": {
+        "fr": "La pompe a démarré sans que le BPC l'ordonne. Est-ce volontaire ?",
+        "en": "The pump started when your BPC did not order it. Is this intentional?",
+    },
+    "backwashReminder": {
+        "fr": "Pensez à effectuer un contre-lavage régulièrement pour maintenir le bon fonctionnement de votre filtration.",
+        "en": "Remember to perform a backwash regularly to maintain proper filtration.",
+    },
+    "filterCloggedAlert": {
+        "fr": "Attention, votre filtre est encrassé, vous devez le nettoyer.",
+        "en": "Warning, your filter is clogged, you must clean it.",
+    },
+    "filterAlmostCloggedAlert": {
+        "fr": "Attention, votre filtre est en train de s'encrasser, pensez à le nettoyer bientôt.",
+        "en": "Warning, your filter is getting clogged, remember to clean it soon.",
+    },
+    "preFilterBasketCloggedAlert": {
+        "fr": "Le panier du préfiltre est encrassé.",
+        "en": "The prefilter basket is clogged.",
+    },
+    "suctionValveClosedAlert": {
+        "fr": "La vanne d'aspiration est fermée ou la pompe n'a pas démarré.",
+        "en": "The suction valve is closed or the pump has not started.",
+    },
+    "dischargeValveClosedAlert": {
+        "fr": "La vanne de refoulement est fermée.",
+        "en": "The discharge valve is closed.",
+    },
+    "waterLevelLowAlert": {
+        "fr": "Le niveau d'eau de la piscine est bas.",
+        "en": "The water level in the pool is low.",
+    },
+    "electrolyserShouldBeStoppedDueToLowTemperature": {
+        "fr": "La température de l'eau est basse, éteignez votre électrolyseur en passant en mode OFF.",
+        "en": "The water temperature is low, please switch off your electrolyser by changing the mode to OFF.",
+    },
+    "pHRegulationAlgorithmInhibited": {
+        "fr": "L'algorithme de traitement automatique du pH a été mis en pause. Veuillez effectuer une correction manuelle.",
+        "en": "The automatic pH processing algorithm has been paused. Please perform a manual correction.",
+    },
+    "pHRegulationInformation": {
+        "fr": "Information sur la régulation du pH.",
+        "en": "pH regulation information.",
+    },
 }
+
+# Actions non actionnables → pas de notification persistante.
+_NON_ACTIONABLE_ACTIONS: frozenset[str] = frozenset({"", "None", "unknown"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -167,7 +285,9 @@ class EasyCareUserCoordinator(DataUpdateCoordinator[UserData]):
         )
         self._client = client
         self._last_fetched_at: datetime | None = None
-        self._last_notified_action: str | None = None
+        # Actions déjà notifiées et encore actives (clés API camelCase), pour
+        # créer une notif par alerte sans la recréer si l'utilisateur l'a fermée.
+        self._notified_actions: set[str] = set()
 
     @property
     def last_fetched_at(self) -> datetime | None:
@@ -208,32 +328,43 @@ class EasyCareUserCoordinator(DataUpdateCoordinator[UserData]):
         self._last_fetched_at = datetime.now(tz=timezone.utc)
         _LOGGER.debug("User update OK : pH=%s, T=%s°C", metrics.ph_value, metrics.temperature_value)
         result = UserData(client=client, pool=pool, metrics=metrics, alerts=alerts, treatment=treatment)
-        self._maybe_notify_pool_action(alerts)
+        self._sync_pool_action_notifications(alerts)
         return result
 
-    def _maybe_notify_pool_action(self, alerts: Alerts) -> None:
-        """Crée une notification HA persistante si une nouvelle action piscine est détectée.
+    def _sync_pool_action_notifications(self, alerts: Alerts) -> None:
+        """Synchronise une notification HA persistante par alerte piscine active.
 
-        La notification n'est créée que lorsque l'action change, pour éviter
-        de recréer la même notification à chaque refresh (toutes les 30 min).
-        L'utilisateur peut fermer la notification — elle ne réapparaîtra que si
-        une action différente est détectée. Au redémarrage de HA, la mémoire est
-        perdue : une notification sera recréée une seule fois si une action est active.
+        Stratégie (une notif par alerte, fermable individuellement) :
+          - une alerte qui apparaît → création d'une notif dédiée ;
+          - une alerte qui disparaît (résolue côté serveur) → suppression de sa notif ;
+          - une alerte déjà notifiée puis fermée par l'utilisateur n'est PAS recréée
+            tant qu'elle reste active (elle reste dans `_notified_actions`).
+        Au redémarrage de HA la mémoire est perdue : les alertes actives sont
+        re-notifiées une fois.
         """
-        action = alerts.latest_action
-        if not action or action == "None":
-            return
-        if action == self._last_notified_action:
-            return
-        self._last_notified_action = action
-        message = _POOL_ACTION_MESSAGES.get(action, action)
-        _LOGGER.info("Nouvelle action piscine détectée : %s", action)
-        pn_create(
-            self.hass,
-            message=message,
-            title="easy·care by Waterair",
-            notification_id="easycare_bywaterair_pool_action",
-        )
+        active = {
+            n.action for n in alerts.notifications
+            if n.action not in _NON_ACTIONABLE_ACTIONS
+        }
+        lang = (self.hass.config.language or "en").lower()
+        msg_lang = "fr" if lang.startswith("fr") else "en"
+
+        for action in active - self._notified_actions:
+            messages = _POOL_ACTION_MESSAGES.get(action)
+            message = messages[msg_lang] if messages else action
+            _LOGGER.info("Nouvelle action piscine détectée : %s", action)
+            pn_create(
+                self.hass,
+                message=message,
+                title="easy·care by Waterair",
+                notification_id=f"easycare_bywaterair_pool_action_{action}",
+            )
+
+        for action in self._notified_actions - active:
+            _LOGGER.debug("Action piscine résolue : %s", action)
+            pn_dismiss(self.hass, notification_id=f"easycare_bywaterair_pool_action_{action}")
+
+        self._notified_actions = active
 
 
 class EasyCareModulesCoordinator(DataUpdateCoordinator[tuple[Module, ...]]):
