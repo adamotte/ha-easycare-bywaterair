@@ -226,6 +226,19 @@ class EasyCareClient:
             except EasyCareInvalidResponseError as err:
                 _LOGGER.warning("Voie BPC ignorée : %s", err)
         inputs.sort(key=lambda x: x.index)
+        # Diagnostic boost/marche forcée : champs discriminants par voie.
+        # Permet d'identifier la signature d'une marche forcée (origin/info)
+        # afin de distinguer un boost d'une filtration AUTO planifiée.
+        _LOGGER.debug(
+            "BPC status — voies : %s",
+            [
+                {
+                    "index": i.index, "value": i.value, "time": i.remaining_time,
+                    "origin": i.origin, "info": list(i.info),
+                }
+                for i in inputs
+            ],
+        )
         return tuple(inputs), bpc_temperature
 
     async def get_firmware_update(self, watbox_serial: str, module_short_name: str) -> dict[str, Any]:
