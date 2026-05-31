@@ -1,13 +1,9 @@
-**Notifications complètes (issue #9)**
+**Suivi du remplacement de pompe (issue #6)**
 
-Le capteur **Dernière notification** gère désormais l'ensemble des types de notification de l'écosystème Waterair (calibration, hivernage, traitement chlore, piles faibles, fuite, filtre encrassé, vannes, perte de connectivité, niveau d'eau, électrolyseur, régulation pH…).
+Après un changement de pompe (SAV/garantie), suivez la nouvelle pompe séparément sans perdre le total. Dans **Configurer**, section « Remplacement de pompe » : saisissez le nombre d'heures au remplacement, la date, et (si la puissance a changé) la puissance de l'ancienne pompe.
 
-- Nouvel attribut **`notifications`** sur le capteur : la **liste complète** des alertes actives (`action` + `date`), de la plus récente à la plus ancienne — utile quand plusieurs alertes sont actives en même temps.
-- **Une notification persistante par alerte** : chaque alerte apparaît comme une notification distincte, **fermable individuellement**. Une alerte fermée ne réapparaît pas tant qu'elle reste active ; une alerte résolue côté Waterair disparaît automatiquement.
-- Libellés et messages en **français et anglais**, alignés sur la terminologie de l'application officielle.
+- Nouveaux capteurs **Durée de fonctionnement** et **Énergie** (pompe actuelle uniquement)
+- L'**Énergie totale** reste correcte même si la puissance a changé (ex. P40 560 W → P35 150 W)
+- Libellés alignés sur l'application officielle Waterair
 
----
-
-**Correctif**
-
-Message d'erreur clair si la dépendance `curl_cffi` n'a pas pu être installée (au lieu d'une erreur technique), avec la marche à suivre.
+**À noter :** Home Assistant **2024.6** minimum requis.
