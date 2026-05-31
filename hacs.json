@@ -1,6 +1,6 @@
 {
   "name": "easy·care by Waterair",
-  "homeassistant": "2024.1.0",
+  "homeassistant": "2024.6.0",
   "render_readme": true,
   "zip_release": false,
   "content_in_root": false

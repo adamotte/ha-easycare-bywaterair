@@ -3,7 +3,7 @@
 [![Release](https://img.shields.io/github/v/release/adamotte/ha-easycare-bywaterair?style=flat-square)](https://github.com/adamotte/ha-easycare-bywaterair/releases)
 [![HACS](https://img.shields.io/badge/HACS-Custom-orange.svg?style=flat-square)](https://hacs.xyz)
 [![License](https://img.shields.io/github/license/adamotte/ha-easycare-bywaterair?style=flat-square)](LICENSE)
-[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-%3E%3D2024.1-blue?style=flat-square&logo=home-assistant)](https://www.home-assistant.io)
+[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-%3E%3D2024.6-blue?style=flat-square&logo=home-assistant)](https://www.home-assistant.io)
 [![Validate](https://github.com/adamotte/ha-easycare-bywaterair/actions/workflows/validate.yml/badge.svg)](https://github.com/adamotte/ha-easycare-bywaterair/actions/workflows/validate.yml)
 [![hassfest](https://github.com/adamotte/ha-easycare-bywaterair/actions/workflows/hassfest.yml/badge.svg)](https://github.com/adamotte/ha-easycare-bywaterair/actions/workflows/hassfest.yml)
 [![Last commit](https://img.shields.io/github/last-commit/adamotte/ha-easycare-bywaterair/main?style=flat-square)](https://github.com/adamotte/ha-easycare-bywaterair/commits/main)
@@ -103,14 +103,31 @@ The `filtration_daily_duration` sensor also exposes the following attributes:
 To track pump energy consumption in the [HA Energy Dashboard](https://www.home-assistant.io/docs/energy/):
 
 1. Go to **Settings → Devices & Services → easy·care by Waterair → Configure**
-2. Enter the **rated power of your pump in watts** (e.g. `150` for a P35)
+2. Enter the **power of your current pump in watts** (e.g. `150` for a P35)
 3. Confirm — the integration reloads and two new sensors appear on the BPC device:
    - **Pump power** (`sensor.*_pump_power`) — instantaneous consumption in W (rated power when running, 0 when stopped)
-   - **Pump energy** (`sensor.*_pump_energy`) — cumulative energy in kWh since the last counter reset
-4. In **Settings → Energy → Individual devices → Add device**, select **Pump energy**
+   - **Total energy** (`sensor.*_pump_energy`) — cumulative energy in kWh since the counter reference date
+4. In **Settings → Energy → Individual devices → Add device**, select **Total energy**
 
 > The energy sensor uses the cumulative runtime counter already provided by the BPC module.
 > Setting the power to `0` disables both sensors.
+
+## 🔁 Pump replacement tracking
+
+The Waterair runtime counter **never resets** when you replace the pump (e.g. under warranty) — it keeps accumulating across all pumps. To track the **new pump** separately:
+
+1. Go to **Settings → Devices & Services → easy·care by Waterair → Configure**
+2. Open the **Pump replacement** section and fill in:
+   - **Pump hours before replacement** — the runtime counter value at the moment of replacement
+   - **Previous pump power** (optional) — only if the new pump has a different wattage (e.g. P40 560 W → P35 150 W)
+   - **Pump replacement date** (optional, informational)
+3. Confirm — two new sensors appear on the BPC device:
+   - **Operating time** (`sensor.*_pump_current_runtime`) — runtime of the current pump only, since replacement
+   - **Energy** (`sensor.*_pump_current_energy`) — energy of the current pump only (if power is configured)
+
+The **Total operating time** and **Total energy** sensors remain the lifetime cumulative values. When a previous pump power is set, **Total energy** is computed correctly across the change (hours before replacement at the old wattage + hours after at the current wattage).
+
+> Leave the section at `0` if you never replaced the pump.
 
 ## 🎛️ Available services
 

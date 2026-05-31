@@ -16,8 +16,10 @@ from typing import Any
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
+from homeassistant.data_entry_flow import section
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.selector import DateSelector
 
 from .api.auth import EasyCareAuth
 from .api.client import EasyCareClient
@@ -35,6 +37,9 @@ from .const import (
     CONF_ID_TOKEN_EXPIRES_AT,
     CONF_POOL_ID,
     CONF_PUMP_POWER_W,
+    CONF_PUMP_REPLACEMENT_DATE,
+    CONF_PUMP_REPLACEMENT_PREVIOUS_POWER_W,
+    CONF_PUMP_REPLACEMENT_RUNTIME_H,
     CONF_REFRESH_TOKEN,
     DOMAIN,
 )
@@ -177,18 +182,41 @@ class EasyCareConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class EasyCareOptionsFlow(OptionsFlow):
-    """Options flow pour configurer la puissance de la pompe."""
+    """Options flow : puissance de la pompe et suivi de remplacement de pompe."""
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        """Étape unique : saisie de la puissance nominale de la pompe."""
+        """Étape unique : puissance pompe + section « remplacement de pompe »."""
         if user_input is not None:
-            return self.async_create_entry(data=user_input)
-        current_power = self.config_entry.options.get(CONF_PUMP_POWER_W, 0)
+            # La section imbrique ses champs ; on aplatit pour garder des options plates
+            # (les capteurs lisent les options à plat, sans connaître la section).
+            replacement = user_input.pop("pump_replacement", {})
+            return self.async_create_entry(data={**user_input, **replacement})
+        opts = self.config_entry.options
+        current_power = opts.get(CONF_PUMP_POWER_W, 0)
+        current_baseline = opts.get(CONF_PUMP_REPLACEMENT_RUNTIME_H, 0)
+        current_prev_power = opts.get(CONF_PUMP_REPLACEMENT_PREVIOUS_POWER_W, 0)
+        current_date = opts.get(CONF_PUMP_REPLACEMENT_DATE)
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema({
                 vol.Optional(CONF_PUMP_POWER_W, default=current_power): vol.All(
                     vol.Coerce(int), vol.Range(min=0, max=10000)
+                ),
+                vol.Required("pump_replacement"): section(
+                    vol.Schema({
+                        vol.Optional(
+                            CONF_PUMP_REPLACEMENT_RUNTIME_H, default=current_baseline
+                        ): vol.All(vol.Coerce(int), vol.Range(min=0, max=100000)),
+                        vol.Optional(
+                            CONF_PUMP_REPLACEMENT_PREVIOUS_POWER_W, default=current_prev_power
+                        ): vol.All(vol.Coerce(int), vol.Range(min=0, max=10000)),
+                        vol.Optional(
+                            CONF_PUMP_REPLACEMENT_DATE,
+                            description={"suggested_value": current_date},
+                        ): DateSelector(),
+                    }),
+                    # Repliée par défaut tant qu'aucun remplacement n'est configuré.
+                    {"collapsed": current_baseline <= 0},
                 ),
             }),
         )

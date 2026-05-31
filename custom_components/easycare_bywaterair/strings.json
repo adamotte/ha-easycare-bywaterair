@@ -41,13 +41,29 @@
   "options": {
     "step": {
       "init": {
-        "title": "easy·care — Pump power",
-        "description": "Configure the rated power of your filtration pump to enable energy monitoring in the HA energy dashboard. Set to 0 to disable.",
+        "title": "easy·care — Pump settings",
+        "description": "Configure the rated power of your filtration pump for energy monitoring. Set to 0 to disable.",
         "data": {
-          "pump_power_w": "Pump rated power (W)"
+          "pump_power_w": "Current pump power (W)"
         },
         "data_description": {
-          "pump_power_w": "Nominal power of your pump in watts (e.g. 150 for a P35). Set to 0 to disable energy sensors."
+          "pump_power_w": "Power of your current pump in watts (e.g. 150 for a P35). Set to 0 to disable energy sensors."
+        },
+        "sections": {
+          "pump_replacement": {
+            "name": "Pump replacement",
+            "description": "If you replaced your pump (e.g. under warranty), enter the runtime counter value at the time of replacement to track the new pump separately. Leave at 0 otherwise.",
+            "data": {
+              "pump_replacement_runtime_h": "Pump hours before replacement (h)",
+              "pump_replacement_previous_power_w": "Previous pump power (W)",
+              "pump_replacement_date": "Pump replacement date"
+            },
+            "data_description": {
+              "pump_replacement_runtime_h": "Total runtime counter value when the pump was replaced. Adds a \"current pump\" sensor counting from the replacement.",
+              "pump_replacement_previous_power_w": "Used to compute total energy correctly if the power changed at replacement (e.g. P40 560 W → P35 150 W). Leave at 0 if the power did not change.",
+              "pump_replacement_date": "Date the pump was replaced (informational, shown as an attribute)."
+            }
+          }
         }
       }
     }
@@ -163,8 +179,10 @@
         }
       },
       "pump_power": {"name": "Pump power"},
-      "pump_energy": {"name": "Pump energy"},
-      "pump_total_runtime": {"name": "Pump total runtime"},
+      "pump_energy": {"name": "Total energy"},
+      "pump_total_runtime": {"name": "Total operating time"},
+      "pump_current_runtime": {"name": "Operating time"},
+      "pump_current_energy": {"name": "Energy"},
       "pump_counter_date": {"name": "Counter reference date"},
       "boost_remaining": {"name": "Boost remaining"},
       "spot_mode": {"name": "Spotlight mode"},

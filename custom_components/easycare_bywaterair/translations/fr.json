@@ -41,13 +41,29 @@
   "options": {
     "step": {
       "init": {
-        "title": "easy·care — Puissance de la pompe",
-        "description": "Configurez la puissance nominale de votre pompe de filtration pour activer le suivi de consommation dans le dashboard énergie de HA. Mettez 0 pour désactiver.",
+        "title": "easy·care — Réglages de la pompe",
+        "description": "Configurez la puissance nominale de votre pompe de filtration pour le suivi de consommation. Mettez 0 pour désactiver.",
         "data": {
-          "pump_power_w": "Puissance nominale de la pompe (W)"
+          "pump_power_w": "Puissance de la pompe actuelle (W)"
         },
         "data_description": {
-          "pump_power_w": "Puissance nominale en watts (ex. 150 pour une pompe P35). Mettez 0 pour désactiver les capteurs d'énergie."
+          "pump_power_w": "Puissance de votre pompe actuelle en watts (ex. 150 pour une P35). Mettez 0 pour désactiver les capteurs d'énergie."
+        },
+        "sections": {
+          "pump_replacement": {
+            "name": "Remplacement de pompe",
+            "description": "Si vous avez remplacé votre pompe (ex. sous garantie/SAV), renseignez la valeur du compteur de durée au moment du remplacement pour suivre la nouvelle pompe séparément. Laissez à 0 sinon.",
+            "data": {
+              "pump_replacement_runtime_h": "Nombre d'heures de la pompe avant remplacement (h)",
+              "pump_replacement_previous_power_w": "Puissance de l'ancienne pompe (W)",
+              "pump_replacement_date": "Date de remplacement de la pompe"
+            },
+            "data_description": {
+              "pump_replacement_runtime_h": "Valeur du compteur de durée totale au moment du remplacement. Ajoute un capteur « pompe actuelle » qui compte à partir du remplacement.",
+              "pump_replacement_previous_power_w": "Sert à calculer l'énergie totale si la puissance a changé au remplacement (ex. P40 560 W → P35 150 W). Laissez à 0 si la puissance n'a pas changé.",
+              "pump_replacement_date": "Date à laquelle la pompe a été remplacée (informatif, affiché en attribut)."
+            }
+          }
         }
       }
     }
@@ -161,8 +177,10 @@
         }
       },
       "pump_power": {"name": "Puissance pompe"},
-      "pump_energy": {"name": "Énergie pompe"},
-      "pump_total_runtime": {"name": "Durée totale pompe"},
+      "pump_energy": {"name": "Énergie totale"},
+      "pump_total_runtime": {"name": "Durée totale de fonctionnement"},
+      "pump_current_runtime": {"name": "Durée de fonctionnement"},
+      "pump_current_energy": {"name": "Énergie"},
       "pump_counter_date": {"name": "Date référence compteur"},
       "boost_remaining": {"name": "Temps boost restant"},
       "spot_mode": {"name": "Mode projecteur"},
