@@ -91,13 +91,9 @@ class EasyCareConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
         if user_input is not None:
             return await self._async_login(user_input, errors)
-        suggested: dict[str, str] = {}
-        if self._reauth_entry is not None:
-            suggested[CONF_USERNAME] = self._reauth_entry.data.get(CONF_USERNAME, "")
         return self.async_show_form(
             step_id="reauth_confirm",
             data_schema=STEP_REAUTH_DATA_SCHEMA,
-            suggested_values=suggested,
         )
 
     async def async_step_pool(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:

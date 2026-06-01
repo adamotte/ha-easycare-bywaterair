@@ -1,0 +1,42 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install test dependencies
+        run: >
+          pip install
+          pytest
+          pytest-asyncio
+          "pytest-homeassistant-custom-component>=0.13.200"
+          pytest-cov
+          aioresponses
+          freezegun
+          curl_cffi
+
+      - name: Run tests
+        run: >
+          pytest tests/
+          --cov=custom_components/easycare_bywaterair
+          --cov-report=xml
+          --cov-report=term-missing
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          file: coverage.xml
+          fail_ci_if_error: false
