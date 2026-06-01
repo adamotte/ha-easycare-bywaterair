@@ -1,0 +1,39 @@
+{
+  "pools": [
+    {
+      "modules": [
+        {
+          "type": "lr-bst-compact",
+          "name": "WATBOX-AABBCC",
+          "id": "watbox-id-001",
+          "serialNumber": "AABBCC",
+          "numberOfInputs": 0,
+          "softwareVersion": "1.2.3",
+          "hardwareVersion": "2.0"
+        },
+        {
+          "type": "lr-pc",
+          "name": "BPC-DDEEFF",
+          "id": "bpc-id-002",
+          "serialNumber": "DDEEFF",
+          "numberOfInputs": 3,
+          "outputs": [
+            {
+              "index": 0,
+              "name": "pompe",
+              "id": "out-pump-0",
+              "totalActivationTime": 1200,
+              "totalActivationTimeResetDate": "2024-01-01T00:00:00Z"
+            },
+            {
+              "index": 1,
+              "name": "spot",
+              "id": "out-spot-1",
+              "totalActivationTime": 300
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

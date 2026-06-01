@@ -1,0 +1,8 @@
+{
+  "temperature": 27,
+  "pool": [
+    {"index": 0, "value": 1, "time": "01:30", "origin": 0, "info": [], "tempRef": 6},
+    {"index": 1, "value": 0, "time": "00:00", "origin": 0, "info": []},
+    {"index": 2, "value": 0, "time": "00:00", "origin": 0, "info": []}
+  ]
+}
