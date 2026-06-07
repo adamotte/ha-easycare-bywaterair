@@ -1,0 +1,9 @@
+{
+  "mode": "auto",
+  "powerState": "on",
+  "boostTimeLeft": "00:00",
+  "boostDuration": null,
+  "manualDuration": null,
+  "totalActivationTime": "120:30",
+  "isPoolPower": true
+}

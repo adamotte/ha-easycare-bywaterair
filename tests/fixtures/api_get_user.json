@@ -1,0 +1,31 @@
+{
+  "firstName": "Jean",
+  "lastName": "Testeur",
+  "email": "jean.testeur@example.com",
+  "addressLine1": "12 Rue de la Piscine",
+  "addressLine2": "",
+  "postalCode": "67000",
+  "city": "Strasbourg",
+  "pools": [
+    {
+      "_id": "pool-abc123",
+      "model": "Waterair Celebris 440",
+      "volume": 44.0,
+      "address": "12 Rue de la Piscine, 67000 Strasbourg",
+      "latitude": 48.5734,
+      "longitude": 7.7521,
+      "status": {
+        "lastPhMeasure": {"value": 7.4, "date": 1700000000},
+        "lastRedoxMeasure": {"value": 650.0, "date": 1700000000},
+        "lastTemperatureMeasure": {"value": 25.0, "date": 1700000000},
+        "lastPressureMeasure": {"value": 1.2, "date": 1700000000}
+      },
+      "notifications": {
+        "1": {"action": "batteryLow", "date": "2024-01-15T10:00:00Z"}
+      },
+      "waterChemistryCorrectionProtocol": {
+        "correctionProtocolType": "None"
+      }
+    }
+  ]
+}

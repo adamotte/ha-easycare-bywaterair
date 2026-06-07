@@ -4,6 +4,7 @@
 [![HACS](https://img.shields.io/badge/HACS-Custom-orange.svg?style=flat-square)](https://hacs.xyz)
 [![License](https://img.shields.io/github/license/adamotte/ha-easycare-bywaterair?style=flat-square)](LICENSE)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-%3E%3D2024.6-blue?style=flat-square&logo=home-assistant)](https://www.home-assistant.io)
+[![Tests](https://github.com/adamotte/ha-easycare-bywaterair/actions/workflows/tests.yml/badge.svg)](https://github.com/adamotte/ha-easycare-bywaterair/actions/workflows/tests.yml)
 [![Validate](https://github.com/adamotte/ha-easycare-bywaterair/actions/workflows/validate.yml/badge.svg)](https://github.com/adamotte/ha-easycare-bywaterair/actions/workflows/validate.yml)
 [![hassfest](https://github.com/adamotte/ha-easycare-bywaterair/actions/workflows/hassfest.yml/badge.svg)](https://github.com/adamotte/ha-easycare-bywaterair/actions/workflows/hassfest.yml)
 [![Last commit](https://img.shields.io/github/last-commit/adamotte/ha-easycare-bywaterair/main?style=flat-square)](https://github.com/adamotte/ha-easycare-bywaterair/commits/main)

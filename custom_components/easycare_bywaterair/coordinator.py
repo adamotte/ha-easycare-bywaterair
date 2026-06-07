@@ -45,6 +45,7 @@ from .api.models import (
 )
 from .const import (
     DOMAIN,
+    KNOWN_MODULE_TYPES,
     MODULE_TYPE_AC1,
     MODULE_TYPE_BPC,
     MODULE_TYPE_PRESSURE,
@@ -367,6 +368,43 @@ class EasyCareUserCoordinator(DataUpdateCoordinator[UserData]):
         self._notified_actions = active
 
 
+# Préfixe attendu du champ `name` des modules (format TYPE-SERIAL), par type API.
+# Sert de repli quand le `type` retourné par l'API ne correspond à aucune valeur
+# connue (variantes matérielles dont le type diffère — issue #10).
+_MODULE_NAME_PREFIX: dict[str, str] = {
+    MODULE_TYPE_WATBOX: "WATBOX",
+    MODULE_TYPE_BPC: "BPC",
+    MODULE_TYPE_AC1: "AC1",
+    MODULE_TYPE_PRESSURE: "LR-PR",
+}
+
+
+def _match_modules(
+    modules: tuple[Module, ...], module_type: str
+) -> tuple[tuple[Module, ...], bool]:
+    """Résout les modules d'un type, avec repli par préfixe de nom.
+
+    Match d'abord sur le `type` officiel ; si aucun module ne correspond, repli
+    sur le préfixe attendu du champ `name` (`_MODULE_NAME_PREFIX`) pour gérer les
+    variantes matérielles dont le `type` diffère de la valeur attendue (issue #10).
+
+    Fonction pure (ne logge rien) pour être utilisable aussi bien sur `self.data`
+    que sur la liste locale d'un cycle de refresh en cours.
+
+    Returns:
+        (modules trouvés, repli_utilisé). `repli_utilisé` vaut True uniquement si
+        le match par `type` a échoué et que le repli par nom a produit un résultat.
+    """
+    matched = tuple(m for m in modules if m.type == module_type)
+    if matched:
+        return matched, False
+    prefix = _MODULE_NAME_PREFIX.get(module_type)
+    if not prefix:
+        return (), False
+    fallback = tuple(m for m in modules if m.name.upper().startswith(prefix))
+    return fallback, bool(fallback)
+
+
 class EasyCareModulesCoordinator(DataUpdateCoordinator[tuple[Module, ...]]):
     """Coordinator pour la liste des modules physiques (24h)."""
 
@@ -385,7 +423,16 @@ class EasyCareModulesCoordinator(DataUpdateCoordinator[tuple[Module, ...]]):
         except Exception as err:  # noqa: BLE001
             raise _wrap_api_error(err, "get_modules") from err
 
-        watbox = next((m for m in modules if m.type == MODULE_TYPE_WATBOX), None)
+        unknown = [(m.name, m.type) for m in modules if m.type not in KNOWN_MODULE_TYPES]
+        if unknown:
+            _LOGGER.warning(
+                "Module(s) de type inconnu détecté(s) : %s — non géré(s) par "
+                "l'intégration. Merci de signaler ces types dans une issue.",
+                unknown,
+            )
+
+        watbox_matched, _ = _match_modules(modules, MODULE_TYPE_WATBOX)
+        watbox = watbox_matched[0] if watbox_matched else None
         if watbox is None:
             _LOGGER.debug("Modules update OK : %d module(s), pas de WATBOX pour check firmware", len(modules))
             return modules
@@ -411,23 +458,34 @@ class EasyCareModulesCoordinator(DataUpdateCoordinator[tuple[Module, ...]]):
         _LOGGER.debug("Modules update OK : %d module(s)", len(enriched))
         return tuple(enriched)
 
-    def get_watbox(self) -> Module | None:
-        """Retourne le module WATBOX, ou None si absent."""
-        if not self.data:
-            return None
-        return next((m for m in self.data if m.type == MODULE_TYPE_WATBOX), None)
-
-    def get_bpc(self) -> Module | None:
-        """Retourne le module BPC, ou None si absent."""
-        if not self.data:
-            return None
-        return next((m for m in self.data if m.type == MODULE_TYPE_BPC), None)
-
-    def get_modules_by_type(self, module_type: str) -> tuple[Module, ...]:
-        """Retourne tous les modules d'un type donné."""
+    def _resolve_modules(self, module_type: str) -> tuple[Module, ...]:
+        """Comme `_match_modules` sur `self.data`, en loggant le repli éventuel."""
         if not self.data:
             return ()
-        return tuple(m for m in self.data if m.type == module_type)
+        modules, used_fallback = _match_modules(self.data, module_type)
+        if used_fallback:
+            _LOGGER.warning(
+                "Module(s) %s détecté(s) par repli sur le nom : %s — type "
+                "inattendu (attendu %r). Merci de signaler ce type dans une issue.",
+                _MODULE_NAME_PREFIX.get(module_type),
+                [(m.name, m.type) for m in modules],
+                module_type,
+            )
+        return modules
+
+    def get_watbox(self) -> Module | None:
+        """Retourne le module WATBOX, ou None si absent (repli par nom — issue #10)."""
+        modules = self._resolve_modules(MODULE_TYPE_WATBOX)
+        return modules[0] if modules else None
+
+    def get_bpc(self) -> Module | None:
+        """Retourne le module BPC, ou None si absent (repli par nom — issue #10)."""
+        modules = self._resolve_modules(MODULE_TYPE_BPC)
+        return modules[0] if modules else None
+
+    def get_modules_by_type(self, module_type: str) -> tuple[Module, ...]:
+        """Retourne tous les modules d'un type donné (repli par nom — issue #10)."""
+        return self._resolve_modules(module_type)
 
 
 def _pool_status_from_inputs(inputs: tuple[BPCInput, ...]) -> PoolStatus | None:
@@ -485,6 +543,11 @@ class EasyCareBPCCoordinator(DataUpdateCoordinator[BPCData]):
         watbox = self._modules.get_watbox()
         bpc = self._modules.get_bpc()
         if watbox is None or bpc is None:
+            available = [(m.name, m.type) for m in (self._modules.data or ())]
+            _LOGGER.warning(
+                "BPC ou WATBOX introuvable — modules disponibles (name, type) : %s",
+                available,
+            )
             raise UpdateFailed("BPC ou WATBOX absent de la liste des modules")
 
         bpc_temp_reference: int | None = None
@@ -494,6 +557,19 @@ class EasyCareBPCCoordinator(DataUpdateCoordinator[BPCData]):
             raise _wrap_api_error(err, "get_bpc_status") from err
 
         self._last_real_update = datetime.now(tz=timezone.utc)
+
+        # Garde-fou variantes matérielles (issue #10) : le BPC est bien résolu,
+        # mais on vérifie que son contenu expose la voie pompe attendue (index 0).
+        # Sans ce log, un BPC qui réorganise ses index rendrait pompe/boost muets
+        # en silence (les index BPC sont codés en dur dans tout le code).
+        if not any(i.index == 0 for i in inputs):
+            _LOGGER.warning(
+                "BPC %s : voie pompe (index 0) absente des voies status %s — "
+                "pompe et boost indisponibles. Variante matérielle ? "
+                "Merci de signaler ce cas dans une issue.",
+                bpc.name, [i.index for i in inputs],
+            )
+
         pool_status = _pool_status_from_inputs(inputs)
         try:
             pool_status = await self._client.get_pool_status()
