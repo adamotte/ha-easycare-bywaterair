@@ -34,6 +34,7 @@ from custom_components.easycare_bywaterair.const import (
 from custom_components.easycare_bywaterair.coordinator import (
     BPCData,
     EasyCareBPCCoordinator,
+    EasyCareCoordinators,
     EasyCareModulesCoordinator,
     EasyCareUserCoordinator,
     UserData,
@@ -60,12 +61,24 @@ from tests.helpers import (
 )
 
 
-# Variantes matérielles : type API inattendu mais nom reconnaissable (issue #10).
-WATBOX_VARIANT = Module(
-    type="lr-bst-compact-v2", name="WATBOX-#A1234", id="wb-var", serial_number="#A1234",
+# Variantes matérielles (issue #10).
+# Reconnues par PRÉFIXE DE TYPE (famille lr-bst-* / lr-pc-*) :
+WATBOX_TYPE_VARIANT = Module(
+    type="lr-bst-react", name="WATBOX-#A1234", id="wb-tv", serial_number="#A1234",
 )
-BPC_VARIANT = Module(
-    type="lr-pc-next", name="BPC-#B5678", id="bpc-var", serial_number="#B5678",
+BPC_TYPE_VARIANT = Module(
+    type="lr-pc-vs2", name="BPC-#B5678", id="bpc-tv", serial_number="#B5678",
+)
+# BPC2 réel (log utilisateur) : type alias lr-ph, reconnu comme BPC par type.
+BPC2_MODULE = Module(
+    type="lr-ph", name="BPC2-D36C1B", id="bpc2", serial_number="D36C1B",
+)
+# Reconnues par REPLI SUR LE NOM (type totalement inattendu) :
+WATBOX_NAME_ONLY = Module(
+    type="lr-weird", name="WATBOX-#A9999", id="wb-no", serial_number="#A9999",
+)
+BPC_NAME_ONLY = Module(
+    type="lr-weird2", name="BPC-#B9999", id="bpc-no", serial_number="#B9999",
 )
 AC1_VARIANT = Module(
     type="lr-mas-x", name="AC1-#C9012", id="ac1-var", serial_number="#C9012",
@@ -115,31 +128,56 @@ class TestWrapApiError:
 
 class TestMatchModules:
     def test_match_by_type(self):
-        modules, used_fallback = _match_modules((WATBOX_MODULE, BPC_MODULE), MODULE_TYPE_BPC)
+        modules, kind = _match_modules((WATBOX_MODULE, BPC_MODULE), MODULE_TYPE_BPC)
         assert modules == (BPC_MODULE,)
-        assert used_fallback is False
+        assert kind == "type"
 
-    def test_fallback_by_name_when_type_unknown(self):
-        modules, used_fallback = _match_modules((WATBOX_VARIANT, BPC_VARIANT), MODULE_TYPE_WATBOX)
-        assert modules == (WATBOX_VARIANT,)
-        assert used_fallback is True
+    def test_match_by_type_prefix_watbox(self):
+        # lr-bst-react : variante gateway reconnue par préfixe de type lr-bst-.
+        modules, kind = _match_modules((WATBOX_TYPE_VARIANT, BPC_MODULE), MODULE_TYPE_WATBOX)
+        assert modules == (WATBOX_TYPE_VARIANT,)
+        assert kind == "type_prefix"
 
-    def test_type_takes_precedence_over_name(self):
-        # Le vrai BPC (bon type) et une variante au nom BPC : le type gagne, pas de repli.
-        modules, used_fallback = _match_modules((BPC_MODULE, BPC_VARIANT), MODULE_TYPE_BPC)
+    def test_match_by_type_prefix_bpc(self):
+        # lr-pc-vs2 : variante BPC reconnue par préfixe de type lr-pc-.
+        modules, kind = _match_modules((WATBOX_MODULE, BPC_TYPE_VARIANT), MODULE_TYPE_BPC)
+        assert modules == (BPC_TYPE_VARIANT,)
+        assert kind == "type_prefix"
+
+    def test_match_bpc2_alias_lr_ph(self):
+        # BPC2 (type lr-ph) reconnu comme BPC par alias → kind "type", pas de repli nom.
+        modules, kind = _match_modules((WATBOX_MODULE, BPC2_MODULE), MODULE_TYPE_BPC)
+        assert modules == (BPC2_MODULE,)
+        assert kind == "type"
+
+    def test_fallback_by_name_when_type_fully_unknown(self):
+        modules, kind = _match_modules((WATBOX_NAME_ONLY, BPC_NAME_ONLY), MODULE_TYPE_WATBOX)
+        assert modules == (WATBOX_NAME_ONLY,)
+        assert kind == "name"
+
+    def test_exact_type_takes_precedence_over_prefix(self):
+        # Vrai BPC (lr-pc exact) + variante lr-pc-vs2 : l'exact gagne.
+        modules, kind = _match_modules((BPC_MODULE, BPC_TYPE_VARIANT), MODULE_TYPE_BPC)
         assert modules == (BPC_MODULE,)
-        assert used_fallback is False
+        assert kind == "type"
+
+    def test_type_prefix_takes_precedence_over_name(self):
+        # Une variante lr-bst-* doit être prise par le type, pas par le nom.
+        modules, kind = _match_modules((WATBOX_TYPE_VARIANT, WATBOX_NAME_ONLY), MODULE_TYPE_WATBOX)
+        assert WATBOX_TYPE_VARIANT in modules
+        assert kind == "type_prefix"
 
     def test_no_match_returns_empty(self):
-        modules, used_fallback = _match_modules((BPC_MODULE,), MODULE_TYPE_AC1)
+        modules, kind = _match_modules((BPC_MODULE,), MODULE_TYPE_AC1)
         assert modules == ()
-        assert used_fallback is False
+        assert kind == "none"
 
-    def test_ac1_and_pressure_fallback(self):
-        ac1, ac1_fb = _match_modules((AC1_VARIANT,), MODULE_TYPE_AC1)
-        lrpr, lrpr_fb = _match_modules((LRPR_VARIANT,), MODULE_TYPE_PRESSURE)
-        assert ac1 == (AC1_VARIANT,) and ac1_fb is True
-        assert lrpr == (LRPR_VARIANT,) and lrpr_fb is True
+    def test_ac1_and_pressure_name_fallback(self):
+        # AC1/LR-PR n'ont pas de préfixe de type → repli par nom.
+        ac1, ac1_kind = _match_modules((AC1_VARIANT,), MODULE_TYPE_AC1)
+        lrpr, lrpr_kind = _match_modules((LRPR_VARIANT,), MODULE_TYPE_PRESSURE)
+        assert ac1 == (AC1_VARIANT,) and ac1_kind == "name"
+        assert lrpr == (LRPR_VARIANT,) and lrpr_kind == "name"
 
 
 # ---------------------------------------------------------------------------
@@ -302,32 +340,61 @@ class TestModulesCoordinator:
         coord.data = None
         assert coord.get_watbox() is None
 
-    # --- Repli par nom pour variantes matérielles (issue #10) ---
+    # --- Variantes matérielles : préfixe de type puis repli par nom (issue #10) ---
+
+    def test_get_watbox_type_prefix(self, hass, mock_config_entry, mock_client, caplog):
+        # lr-bst-react : reconnu par préfixe de type → debug, pas de warning.
+        mock_config_entry.add_to_hass(hass)
+        coord = EasyCareModulesCoordinator(hass, mock_client, mock_config_entry)
+        coord.data = (WATBOX_TYPE_VARIANT, BPC_MODULE)
+        with caplog.at_level(logging.WARNING):
+            assert coord.get_watbox() is WATBOX_TYPE_VARIANT
+        assert "name fallback" not in caplog.text
+
+    def test_get_bpc_type_prefix(self, hass, mock_config_entry, mock_client, caplog):
+        # lr-pc-vs2 : reconnu par préfixe de type → debug, pas de warning.
+        mock_config_entry.add_to_hass(hass)
+        coord = EasyCareModulesCoordinator(hass, mock_client, mock_config_entry)
+        coord.data = (WATBOX_MODULE, BPC_TYPE_VARIANT)
+        with caplog.at_level(logging.WARNING):
+            assert coord.get_bpc() is BPC_TYPE_VARIANT
+        assert "name fallback" not in caplog.text
+
+    def test_get_bpc2_alias_lr_ph_silent(self, hass, mock_config_entry, mock_client, caplog):
+        # BPC2 (type lr-ph) : reconnu comme BPC par alias, aucun warning (log réel utilisateur).
+        mock_config_entry.add_to_hass(hass)
+        coord = EasyCareModulesCoordinator(hass, mock_client, mock_config_entry)
+        coord.data = (WATBOX_MODULE, BPC2_MODULE)
+        with caplog.at_level(logging.WARNING):
+            assert coord.get_bpc() is BPC2_MODULE
+        assert "name fallback" not in caplog.text
+
+    async def test_bpc2_lr_ph_no_unknown_type_warning(self, hass, mock_config_entry, mock_client, caplog):
+        # lr-ph est dans KNOWN_MODULE_TYPES → pas de warning "Unknown module type".
+        mock_config_entry.add_to_hass(hass)
+        mock_client.get_modules = AsyncMock(return_value=(WATBOX_MODULE, BPC2_MODULE))
+        coord = EasyCareModulesCoordinator(hass, mock_client, mock_config_entry)
+        with caplog.at_level(logging.WARNING):
+            await coord.async_refresh()
+        assert "Unknown module type" not in caplog.text
 
     def test_get_watbox_name_fallback(self, hass, mock_config_entry, mock_client, caplog):
+        # Type totalement inattendu (hors famille lr-bst-) → repli par nom + warning.
         mock_config_entry.add_to_hass(hass)
         coord = EasyCareModulesCoordinator(hass, mock_client, mock_config_entry)
-        coord.data = (WATBOX_VARIANT, BPC_MODULE)
+        coord.data = (WATBOX_NAME_ONLY, BPC_MODULE)
         with caplog.at_level(logging.WARNING):
-            assert coord.get_watbox() is WATBOX_VARIANT
-        assert "repli sur le nom" in caplog.text
-        assert "lr-bst-compact-v2" in caplog.text
+            assert coord.get_watbox() is WATBOX_NAME_ONLY
+        assert "name fallback" in caplog.text
+        assert "lr-weird" in caplog.text
 
-    def test_get_bpc_name_fallback(self, hass, mock_config_entry, mock_client, caplog):
+    def test_get_bpc_prefers_exact_type(self, hass, mock_config_entry, mock_client, caplog):
         mock_config_entry.add_to_hass(hass)
         coord = EasyCareModulesCoordinator(hass, mock_client, mock_config_entry)
-        coord.data = (WATBOX_MODULE, BPC_VARIANT)
-        with caplog.at_level(logging.WARNING):
-            assert coord.get_bpc() is BPC_VARIANT
-        assert "repli sur le nom" in caplog.text
-
-    def test_get_bpc_prefers_type_over_name(self, hass, mock_config_entry, mock_client, caplog):
-        mock_config_entry.add_to_hass(hass)
-        coord = EasyCareModulesCoordinator(hass, mock_client, mock_config_entry)
-        coord.data = (BPC_MODULE, BPC_VARIANT)
+        coord.data = (BPC_MODULE, BPC_TYPE_VARIANT)
         with caplog.at_level(logging.WARNING):
             assert coord.get_bpc() is BPC_MODULE
-        assert "repli sur le nom" not in caplog.text
+        assert "name fallback" not in caplog.text
 
     def test_get_modules_by_type_ac1_name_fallback(self, hass, mock_config_entry, mock_client):
         mock_config_entry.add_to_hass(hass)
@@ -352,20 +419,30 @@ class TestModulesCoordinator:
         coord = EasyCareModulesCoordinator(hass, mock_client, mock_config_entry)
         with caplog.at_level(logging.WARNING):
             await coord.async_refresh()
-        assert "type inconnu" in caplog.text
+        assert "Unknown module type" in caplog.text
         assert "lr-totally-new" in caplog.text
 
-    async def test_firmware_check_uses_watbox_name_fallback(self, hass, mock_config_entry, mock_client):
-        # Une variante WATBOX (type inattendu) doit quand même permettre le check firmware.
-        mock_client.get_modules = AsyncMock(return_value=(WATBOX_VARIANT, BPC_MODULE))
+    async def test_known_variant_type_does_not_warn(self, hass, mock_config_entry, mock_client, caplog):
+        # Une variante listée dans KNOWN_MODULE_TYPES ne déclenche pas le warning.
+        mock_config_entry.add_to_hass(hass)
+        mock_client.get_modules = AsyncMock(
+            return_value=(WATBOX_TYPE_VARIANT, BPC_TYPE_VARIANT)
+        )
+        coord = EasyCareModulesCoordinator(hass, mock_client, mock_config_entry)
+        with caplog.at_level(logging.WARNING):
+            await coord.async_refresh()
+        assert "Unknown module type" not in caplog.text
+
+    async def test_firmware_check_uses_watbox_type_prefix(self, hass, mock_config_entry, mock_client):
+        # Une variante WATBOX (type lr-bst-*) doit quand même permettre le check firmware.
+        mock_client.get_modules = AsyncMock(return_value=(WATBOX_TYPE_VARIANT, BPC_MODULE))
         mock_client.get_firmware_update = AsyncMock(return_value={"version": "9.9.9"})
         mock_config_entry.add_to_hass(hass)
         coord = EasyCareModulesCoordinator(hass, mock_client, mock_config_entry)
         await coord.async_refresh()
-        # get_firmware_update a été appelé avec le serial de la variante WATBOX.
         assert mock_client.get_firmware_update.await_count >= 1
         called_serial = mock_client.get_firmware_update.await_args_list[0].args[0]
-        assert called_serial == WATBOX_VARIANT.serial_number
+        assert called_serial == WATBOX_TYPE_VARIANT.serial_number
 
 
 # ---------------------------------------------------------------------------
@@ -434,7 +511,7 @@ class TestBPCCoordinatorUpdate:
         coord = self._make_coord(hass, mock_config_entry, mock_client, mock_modules)
         with caplog.at_level(logging.WARNING), pytest.raises(UpdateFailed):
             await coord._async_update_data()
-        assert "modules disponibles" in caplog.text
+        assert "available modules" in caplog.text
         assert "lr-mas" in caplog.text  # type de l'AC1 listé
 
     async def test_pump_channel_missing_warns(
@@ -452,7 +529,7 @@ class TestBPCCoordinatorUpdate:
         coord = self._make_coord(hass, mock_config_entry, mock_client, mock_modules)
         with caplog.at_level(logging.WARNING):
             await coord._async_update_data()
-        assert "voie pompe (index 0) absente" in caplog.text
+        assert "pump channel (index 0) missing" in caplog.text
 
     async def test_pump_channel_present_no_warning(
         self, hass, mock_config_entry, mock_client, caplog
@@ -465,4 +542,49 @@ class TestBPCCoordinatorUpdate:
         coord = self._make_coord(hass, mock_config_entry, mock_client, mock_modules)
         with caplog.at_level(logging.WARNING):
             await coord._async_update_data()
-        assert "voie pompe (index 0) absente" not in caplog.text
+        assert "pump channel (index 0) missing" not in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# EasyCareCoordinators — helpers de sécurité BPC (issue #10)
+# ---------------------------------------------------------------------------
+
+class TestCoordinatorsBpcHelpers:
+    def _make(self, bpc_module, bpc_data):
+        modules = MagicMock()
+        modules.get_bpc.return_value = bpc_module
+        bpc = MagicMock()
+        bpc.data = bpc_data
+        return EasyCareCoordinators(user=MagicMock(), modules=modules, bpc=bpc)
+
+    def test_standard_bpc_not_nonstandard(self):
+        coords = self._make(BPC_MODULE, BPCData(inputs=(PUMP_INPUT_ON,)))
+        assert coords.is_bpc_nonstandard() is False
+        assert coords.bpc_nonstandard_type is None
+
+    def test_bpc_prefix_variant_not_nonstandard(self):
+        # lr-pc-vs2 reste un BPC standard (préfixe lr-pc-).
+        coords = self._make(BPC_TYPE_VARIANT, BPCData(inputs=(PUMP_INPUT_ON,)))
+        assert coords.is_bpc_nonstandard() is False
+
+    def test_bpc2_lr_ph_is_nonstandard(self):
+        coords = self._make(BPC2_MODULE, BPCData(inputs=(PUMP_INPUT_ON,)))
+        assert coords.is_bpc_nonstandard() is True
+        assert coords.bpc_nonstandard_type == "lr-ph"
+
+    def test_no_bpc_not_nonstandard(self):
+        coords = self._make(None, None)
+        assert coords.is_bpc_nonstandard() is False
+        assert coords.bpc_nonstandard_type is None
+
+    def test_commands_blocked_when_pump_channel_missing(self):
+        coords = self._make(BPC2_MODULE, BPCData(inputs=(BPCInput(index=1, value=1),)))
+        assert coords.is_bpc_commands_blocked() is True
+
+    def test_commands_not_blocked_when_pump_present(self):
+        coords = self._make(BPC2_MODULE, BPCData(inputs=(PUMP_INPUT_ON,)))
+        assert coords.is_bpc_commands_blocked() is False
+
+    def test_commands_not_blocked_when_no_data(self):
+        coords = self._make(BPC2_MODULE, None)
+        assert coords.is_bpc_commands_blocked() is False

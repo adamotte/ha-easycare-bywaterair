@@ -18,7 +18,7 @@ def _require(data: dict[str, Any], key: str, model_name: str) -> Any:
     """Récupère une clé obligatoire ou lève EasyCareInvalidResponseError."""
     if key not in data or data[key] is None:
         raise EasyCareInvalidResponseError(
-            f"Champ obligatoire '{key}' absent dans la réponse {model_name}"
+            f"Required field '{key}' missing in {model_name} response"
         )
     return data[key]
 

@@ -106,3 +106,20 @@ async def test_light_escalight_created_when_2_inputs(hass, mock_config_entry, mo
     entry = await setup_integration(hass, mock_config_entry, mock_client)
     entity_id = get_entity_id(hass, "light", entry.entry_id, "escalight")
     assert entity_id is not None
+
+
+async def test_light_not_created_when_bpc_commands_blocked(hass, mock_config_entry, mock_client):
+    """Aucune lumière créée si la voie pompe (index 0) est absente (BPC2/lr-ph — issue #10)."""
+    from custom_components.easycare_bywaterair.api.models import Module
+    bpc2 = Module(
+        type="lr-ph", name="BPC2-D36C1B", id="bpc2", serial_number="D36C1B",
+        number_of_inputs=2,
+    )
+    mock_client.get_modules = AsyncMock(return_value=(WATBOX_MODULE, bpc2))
+    # Status BPC sans voie pompe (index 0) → commandes bloquées.
+    mock_client.get_bpc_status = AsyncMock(
+        return_value=((BPCInput(index=BPC_INDEX_SPOT, value=0),), 27)
+    )
+    entry = await setup_integration(hass, mock_config_entry, mock_client)
+    assert get_entity_id(hass, "light", entry.entry_id, "spot") is None
+    assert get_entity_id(hass, "light", entry.entry_id, "escalight") is None

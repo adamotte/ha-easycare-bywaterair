@@ -71,9 +71,9 @@ def _import_curl_session() -> type:
         from curl_cffi.requests import AsyncSession as CurlSession  # noqa: PLC0415
     except ImportError as err:
         raise EasyCareLoginError(
-            "La dépendance 'curl_cffi' est introuvable. Installez-la dans "
-            "l'environnement Home Assistant (« pip install curl_cffi ») ou vérifiez "
-            "que l'intégration a pu installer ses dépendances."
+            "The 'curl_cffi' dependency is missing. Install it in the Home Assistant "
+            "environment (\"pip install curl_cffi\") or check that the integration "
+            "was able to install its dependencies."
         ) from err
     return CurlSession
 
@@ -157,7 +157,7 @@ class EasyCareAuth:
             EasyCareTimeoutError: timeout.
         """
         CurlSession = _import_curl_session()
-        _LOGGER.debug("Début du login silencieux Azure B2C pour %s", email)
+        _LOGGER.debug("Starting silent Azure B2C login for %s", email)
         authorize_url = self.build_authorize_url()
         try:
             async with CurlSession(impersonate="safari15_5") as curl:
@@ -168,7 +168,7 @@ class EasyCareAuth:
                 EasyCareTimeoutError, EasyCareConnectionError):
             raise
         except Exception as err:
-            raise EasyCareLoginError(f"Erreur inattendue pendant le login : {err}") from err
+            raise EasyCareLoginError(f"Unexpected error during login: {err}") from err
         code = self._extract_code_from_url(redirect_url)
         return await self.exchange_code(code)
 
@@ -198,12 +198,12 @@ class EasyCareAuth:
         m = re.search(r"var SETTINGS = (\{.*?\});", resp.text, re.DOTALL)
         if not m:
             raise EasyCareLoginError(
-                "SETTINGS introuvable dans la page Azure B2C — structure inattendue"
+                "SETTINGS not found in the Azure B2C page — unexpected structure"
             )
         try:
             settings = json.loads(m.group(1))
         except json.JSONDecodeError as err:
-            raise EasyCareLoginError(f"SETTINGS JSON invalide : {err}") from err
+            raise EasyCareLoginError(f"Invalid SETTINGS JSON: {err}") from err
         return settings, str(resp.url)
 
     @staticmethod
@@ -246,7 +246,7 @@ class EasyCareAuth:
         try:
             j = json.loads(resp.text)
         except json.JSONDecodeError as err:
-            raise EasyCareLoginError(f"SelfAsserted : réponse non-JSON : {err}") from err
+            raise EasyCareLoginError(f"SelfAsserted: non-JSON response: {err}") from err
         if j.get("status") == "400":
             error_code = j.get("errorCode", "")
             if error_code == "AADB2C90054":
@@ -255,8 +255,8 @@ class EasyCareAuth:
                 f"Échec SelfAsserted (code {error_code}) : {j.get('message', j)}"
             )
         if j.get("status") != "200":
-            raise EasyCareLoginError(f"SelfAsserted : statut inattendu : {j}")
-        _LOGGER.debug("SelfAsserted : identifiants acceptés")
+            raise EasyCareLoginError(f"SelfAsserted: unexpected status: {j}")
+        _LOGGER.debug("SelfAsserted: credentials accepted")
 
     @staticmethod
     async def _get_confirmed(curl: Any, settings: dict, page_url: str) -> str:
@@ -291,10 +291,10 @@ class EasyCareAuth:
         if resp.status_code in (301, 302, 303, 307, 308) and (
             location.startswith("msauth") or "code=" in location
         ):
-            _LOGGER.debug("Code OAuth intercepté depuis confirmed")
+            _LOGGER.debug("OAuth code intercepted from confirmed")
             return location
         raise EasyCareLoginError(
-            f"Confirmed : redirection msauth:// non interceptée "
+            f"Confirmed: msauth:// redirect not intercepted "
             f"(HTTP {resp.status_code}, Location={location[:80]!r})"
         )
 
@@ -330,7 +330,7 @@ class EasyCareAuth:
             EasyCareInvalidCodeError: code invalide ou expiré.
             EasyCareConnectionError : problème réseau.
         """
-        _LOGGER.debug("Échange du code OAuth contre des tokens Azure")
+        _LOGGER.debug("Exchanging OAuth code for Azure tokens")
         params = {
             "code": code,
             "grant_type": "authorization_code",
@@ -341,14 +341,14 @@ class EasyCareAuth:
         try:
             data = await self._post_token_endpoint(params)
         except EasyCareApiError as err:
-            _LOGGER.warning("Échange de code rejeté — HTTP %s", err.status_code)
+            _LOGGER.warning("Code exchange rejected — HTTP %s", err.status_code)
             raise EasyCareInvalidCodeError(
-                f"Code rejeté par Azure B2C (HTTP {err.status_code})"
+                f"Code rejected by Azure B2C (HTTP {err.status_code})"
             ) from err
 
         if "error" in data:
-            _LOGGER.warning("Erreur OAuth dans la réponse : %s", data.get("error"))
-            raise EasyCareInvalidCodeError(f"Erreur Azure B2C: {data.get('error')}")
+            _LOGGER.warning("OAuth error in response: %s", data.get("error"))
+            raise EasyCareInvalidCodeError(f"Azure B2C error: {data.get('error')}")
 
         try:
             tokens = OAuthTokens.from_api(data)
@@ -358,7 +358,7 @@ class EasyCareAuth:
             ) from err
 
         self._oauth_tokens = tokens
-        _LOGGER.info("Tokens Azure obtenus avec succès")
+        _LOGGER.info("Azure tokens obtained successfully")
         await self._refresh_bearer_from_id_token(tokens.id_token)
         await self._notify_tokens_updated()
         return tokens
@@ -374,9 +374,9 @@ class EasyCareAuth:
             EasyCareAuthError        : autre erreur d'auth.
         """
         if self._oauth_tokens is None:
-            raise EasyCareAuthError("Aucun refresh_token disponible")
+            raise EasyCareAuthError("No refresh_token available")
 
-        _LOGGER.debug("Renouvellement des tokens Azure via refresh_token")
+        _LOGGER.debug("Refreshing Azure tokens via refresh_token")
         params = {
             "grant_type": "refresh_token",
             "refresh_token": self._oauth_tokens.refresh_token,
@@ -386,37 +386,37 @@ class EasyCareAuth:
             data = await self._post_token_endpoint(params)
         except EasyCareApiError as err:
             if err.status_code == 400 and err.body and "invalid_grant" in err.body:
-                _LOGGER.warning("Refresh token expiré — ré-authentification requise")
+                _LOGGER.warning("Refresh token expired — re-authentication required")
                 raise EasyCareTokenExpiredError(
-                    "Le refresh_token Azure B2C est expiré ou révoqué."
+                    "The Azure B2C refresh_token is expired or revoked."
                 ) from err
             raise
         except EasyCareInvalidResponseError as err:
             # Azure B2C retourne parfois une page HTML (HTTP 200) au lieu d'un JSON
             # {"error": "invalid_grant"} quand le refresh_token est expiré.
             _LOGGER.warning(
-                "Réponse non-JSON du token endpoint Azure B2C (page HTML ?) — "
-                "refresh_token probablement expiré → ré-authentification requise"
+                "Non-JSON response from Azure B2C token endpoint (HTML page?) — "
+                "refresh_token probably expired → re-authentication required"
             )
             raise EasyCareTokenExpiredError(
-                "Azure B2C a retourné une réponse non-JSON : "
-                "refresh_token expiré ou session invalide."
+                "Azure B2C returned a non-JSON response: "
+                "refresh_token expired or invalid session."
             ) from err
 
         try:
             new_tokens = OAuthTokens.from_api(data)
         except EasyCareInvalidResponseError as err:
-            raise EasyCareAuthError(f"Réponse de refresh inattendue : {err}") from err
+            raise EasyCareAuthError(f"Unexpected refresh response: {err}") from err
 
         self._oauth_tokens = new_tokens
-        _LOGGER.info("Tokens Azure rafraîchis avec succès")
+        _LOGGER.info("Azure tokens refreshed successfully")
         await self._refresh_bearer_from_id_token(new_tokens.id_token)
         await self._notify_tokens_updated()
         return new_tokens
 
     async def _refresh_bearer_from_id_token(self, id_token: str) -> BearerToken:
         """Échange un id_token Azure contre un bearer EasyCare."""
-        _LOGGER.debug("Obtention du bearer EasyCare depuis l'id_token Azure")
+        _LOGGER.debug("Getting EasyCare bearer from Azure id_token")
         url = f"{API_HOST_EASYCARE}{API_PATH_TOKEN_FROM_B2C}"
         headers = {
             "Authorization": f"Basic {BEARER_BASIC_AUTH}",
@@ -431,9 +431,9 @@ class EasyCareAuth:
             ) as response:
                 body = await response.text()
                 if response.status != 200:
-                    _LOGGER.error("Échec bearer EasyCare : HTTP %s", response.status)
+                    _LOGGER.error("EasyCare bearer failed: HTTP %s", response.status)
                     raise EasyCareApiError(
-                        "Impossible d'obtenir le bearer EasyCare",
+                        "Could not obtain EasyCare bearer",
                         status_code=response.status, body=body,
                     )
                 try:
@@ -444,21 +444,21 @@ class EasyCareAuth:
                     ) from err
         except asyncio.TimeoutError as err:
             _LOGGER.error(
-                "Timeout (%ds) sur tokenFromAzureADB2CIdToken — serveur Waterair injoignable",
+                "Timeout (%ds) on tokenFromAzureADB2CIdToken — Waterair server unreachable",
                 HTTP_TIMEOUT_AUTH,
             )
             raise EasyCareTimeoutError("Timeout lors de l'obtention du bearer") from err
         except ClientError as err:
             _LOGGER.error(
-                "Erreur réseau sur tokenFromAzureADB2CIdToken : %s: %s",
+                "Network error on tokenFromAzureADB2CIdToken: %s: %s",
                 type(err).__name__, err,
             )
-            raise EasyCareConnectionError(f"Erreur réseau : {err}") from err
+            raise EasyCareConnectionError(f"Network error: {err}") from err
 
         bearer = BearerToken.from_api(data)
         self._bearer = bearer
         _LOGGER.info(
-            "Bearer EasyCare obtenu (expire dans ~%ds)",
+            "EasyCare bearer obtained (expires in ~%ds)",
             int(bearer.expires_at - datetime.now(tz=timezone.utc).timestamp()),
         )
         return bearer
@@ -475,7 +475,7 @@ class EasyCareAuth:
         """
         async with self._refresh_lock:
             if self._oauth_tokens is None:
-                raise EasyCareAuthError("Pas de tokens Azure disponibles")
+                raise EasyCareAuthError("No Azure tokens available")
 
             # Bearer encore valide → retour immédiat, sans aucun appel Azure B2C.
             # On ne touche pas à l'id_token tant que le bearer tient : si le bearer
@@ -490,20 +490,20 @@ class EasyCareAuth:
             # Si l'id_token est encore utilisable, on renouvelle le bearer directement
             # sans passer par le refresh_token Azure B2C.
             if not self._oauth_tokens.is_expired(margin_seconds=0):
-                _LOGGER.debug("Bearer EasyCare expiré → renouvellement depuis id_token existant")
+                _LOGGER.debug("EasyCare bearer expired → renewing from existing id_token")
                 await self._refresh_bearer_from_id_token(self._oauth_tokens.id_token)
                 await self._notify_tokens_updated()
                 return self._bearer.bearer  # type: ignore[union-attr]
 
             # id_token également expiré → refresh Azure B2C nécessaire.
-            _LOGGER.debug("Bearer et id_token expirés → refresh Azure B2C via refresh_token")
+            _LOGGER.debug("Bearer and id_token expired → Azure B2C refresh via refresh_token")
             await self.refresh_tokens()
             return self._bearer.bearer  # type: ignore[union-attr]
 
     async def invalidate_bearer(self) -> None:
         """Force l'invalidation du bearer (à appeler sur réception d'un 401)."""
         async with self._refresh_lock:
-            _LOGGER.debug("Invalidation forcée du bearer EasyCare")
+            _LOGGER.debug("Forced invalidation of EasyCare bearer")
             self._bearer = None
 
     async def _post_token_endpoint(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -532,13 +532,13 @@ class EasyCareAuth:
                     timeout=HTTP_TIMEOUT_AUTH,
                 )
         except Exception as err:  # curl_cffi : erreurs réseau/TLS/timeout
-            raise EasyCareConnectionError(f"Erreur réseau sur OAuth /token : {err}") from err
+            raise EasyCareConnectionError(f"Network error on OAuth /token: {err}") from err
 
         body = response.text
         if response.status_code != 200:
-            _LOGGER.warning("OAuth /token : HTTP %s", response.status_code)
+            _LOGGER.warning("OAuth /token: HTTP %s", response.status_code)
             raise EasyCareApiError(
-                "Échec endpoint OAuth /token",
+                "OAuth /token endpoint failed",
                 status_code=response.status_code, body=body,
             )
         if not body.strip():
@@ -548,8 +548,8 @@ class EasyCareAuth:
         try:
             return json.loads(body)
         except ValueError as err:
-            _LOGGER.warning("OAuth /token corps brut (non-JSON) : %r", body[:200])
-            raise EasyCareInvalidResponseError(f"Réponse OAuth non-JSON : {err}") from err
+            _LOGGER.warning("OAuth /token raw body (non-JSON): %r", body[:200])
+            raise EasyCareInvalidResponseError(f"Non-JSON OAuth response: {err}") from err
 
     async def _notify_tokens_updated(self) -> None:
         """Notifie le callback de mise à jour des tokens si défini."""
@@ -560,4 +560,4 @@ class EasyCareAuth:
         try:
             await self._on_tokens_updated(self._oauth_tokens, self._bearer)
         except Exception as err:  # noqa: BLE001
-            _LOGGER.error("Erreur lors du callback de persistance des tokens : %s", err)
+            _LOGGER.error("Error in token persistence callback: %s", err)

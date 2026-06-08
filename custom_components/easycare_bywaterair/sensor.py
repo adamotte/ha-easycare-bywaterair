@@ -200,7 +200,7 @@ async def async_setup_entry(
         EasyCareDetailSensor(coords.user, entry),
     ])
 
-    _LOGGER.debug("Création de %d sensors", len(sensors))
+    _LOGGER.debug("Creating %d sensors", len(sensors))
     async_add_entities(sensors)
 
 

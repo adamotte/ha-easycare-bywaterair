@@ -44,7 +44,10 @@ from ..const import (
     MODE_AUTO,
     MODE_AUTO_MINUS,
     MODE_AUTO_PLUS,
+    MODULE_TYPE_ALIASES,
     MODULE_TYPE_BPC,
+    MODULE_TYPE_PREFIX_BPC,
+    MODULE_TYPE_PREFIX_WATBOX,
     MODULE_TYPE_WATBOX,
     USER_AGENT,
 )
@@ -123,7 +126,7 @@ class EasyCareClient:
         client = Client.from_api(data)
         pools = data.get("pools") or []
         if not pools:
-            raise EasyCareInvalidResponseError("Aucune piscine trouvée sur le compte Waterair")
+            raise EasyCareInvalidResponseError("No pool found on the Waterair account")
         idx = self._pool_id - 1
         if idx < 0 or idx >= len(pools):
             raise EasyCareInvalidResponseError(
@@ -167,7 +170,7 @@ class EasyCareClient:
             Tuple immuable de tous les modules (WATBOX, BPC, AC1, LR-PR, etc.).
         """
         data = await self._request("GET", API_HOST_EASYCARE, API_PATH_GET_USER_MODULES)
-        _LOGGER.debug("getUserWithHisModules — clés racine : %s", list(data.keys()))
+        _LOGGER.debug("getUserWithHisModules — root keys: %s", list(data.keys()))
         pools = (
             data.get("pools")
             or data.get("poolsWithModules")
@@ -181,11 +184,11 @@ class EasyCareClient:
                 try:
                     modules.append(Module.from_api(m))
                 except EasyCareInvalidResponseError as err:
-                    _LOGGER.warning("Module ignoré : %s", err)
+                    _LOGGER.warning("Module skipped: %s", err)
             return tuple(modules)
         if not pools:
-            _LOGGER.warning("getUserWithHisModules — structure inattendue : %s", list(data.keys()))
-            raise EasyCareInvalidResponseError("Aucune piscine trouvée (getUserWithHisModules)")
+            _LOGGER.warning("getUserWithHisModules — unexpected structure: %s", list(data.keys()))
+            raise EasyCareInvalidResponseError("No pool found (getUserWithHisModules)")
         idx = self._pool_id - 1
         if idx < 0 or idx >= len(pools):
             raise EasyCareInvalidResponseError(
@@ -198,7 +201,7 @@ class EasyCareClient:
             try:
                 modules.append(Module.from_api(m))
             except EasyCareInvalidResponseError as err:
-                _LOGGER.warning("Module ignoré : %s", err)
+                _LOGGER.warning("Module skipped: %s", err)
         return tuple(modules)
 
     async def get_bpc_status(
@@ -239,7 +242,7 @@ class EasyCareClient:
                 bpc_temperature = int(raw_temp)
             except (TypeError, ValueError):
                 bpc_temperature = None
-        _LOGGER.debug("BPC status — temperature (ref seuil) : %s°C", bpc_temperature)
+        _LOGGER.debug("BPC status — temperature (threshold ref): %s°C", bpc_temperature)
 
         pool_inputs = data.get("pool") or []
         inputs: list[BPCInput] = []
@@ -247,13 +250,13 @@ class EasyCareClient:
             try:
                 inputs.append(BPCInput.from_api(raw_input))
             except EasyCareInvalidResponseError as err:
-                _LOGGER.warning("Voie BPC ignorée : %s", err)
+                _LOGGER.warning("BPC channel skipped: %s", err)
         inputs.sort(key=lambda x: x.index)
         # Diagnostic boost/marche forcée : champs discriminants par voie.
         # Permet d'identifier la signature d'une marche forcée (origin/info)
         # afin de distinguer un boost d'une filtration AUTO planifiée.
         _LOGGER.debug(
-            "BPC status — voies : %s",
+            "BPC status — channels: %s",
             [
                 {
                     "index": i.index, "value": i.value, "time": i.remaining_time,
@@ -321,7 +324,7 @@ class EasyCareClient:
 
         # Log diagnostic : toutes les clés racine de la réponse (hors programs, trop verbeux).
         _LOGGER.debug(
-            "BPC programmes — réponse racine : %s",
+            "BPC programs — root response: %s",
             {k: v for k, v in data.items() if k != "programs"},
         )
 
@@ -333,7 +336,7 @@ class EasyCareClient:
                 max_temp_day_before = float(raw_max_temp)
             except (TypeError, ValueError):
                 max_temp_day_before = None
-        _LOGGER.debug("BPC programmes — maxTemperatureTheDayBefore : %s", max_temp_day_before)
+        _LOGGER.debug("BPC programs — maxTemperatureTheDayBefore: %s", max_temp_day_before)
 
         programs = data.get("programs") or []
 
@@ -353,7 +356,7 @@ class EasyCareClient:
                 prog_rule = int(charac.get("rule", 0) or 0)
                 # Log COMPLET avant tout parsing (crash-safe — s'affiche même si la suite plante).
                 _LOGGER.debug(
-                    "BPC programmes — pompe (index 0) programme brut : %s", prog
+                    "BPC programs — pump (index 0) raw program: %s", prog
                 )
                 # État boost — `state` et `remainingDuration` sont à la racine du programme.
                 # Reflète un boost déclenché depuis l'app mobile (state == "boost").
@@ -366,7 +369,7 @@ class EasyCareClient:
                     except (TypeError, ValueError):
                         pump_remaining_duration = None
                 _LOGGER.debug(
-                    "BPC programmes — pompe (index 0) : state=%s remainingDuration=%s",
+                    "BPC programs — pump (index 0): state=%s remainingDuration=%s",
                     pump_state, pump_remaining_duration,
                 )
                 # L'offset AUTO est encodé dans sched (masques de bits 24h par seuil de temp).
@@ -382,7 +385,7 @@ class EasyCareClient:
                             adapt_offset = ADAPT_OFFSET_PLUS
                         # else : standard ou inconnu → ADAPT_OFFSET_NEUTRAL
                 _LOGGER.debug(
-                    "BPC programmes — pompe (index 0) : mode=%s rule=%s → adapt_offset=%d",
+                    "BPC programs — pump (index 0): mode=%s rule=%s → adapt_offset=%d",
                     prog_mode, prog_rule, adapt_offset,
                 )
                 if prog_mode == 0:
@@ -398,17 +401,17 @@ class EasyCareClient:
                     charac, sched=sched_val
                 )
                 _LOGGER.debug(
-                    "BPC programmes — FilterSchedule : ths=%s sched_rows=%s rules=%d",
+                    "BPC programs — FilterSchedule: ths=%s sched_rows=%s rules=%d",
                     filter_schedule.thresholds,
                     len(filter_schedule.sched) if filter_schedule.sched else 0,
                     len(filter_schedule.rules),
                 )
             elif idx == 1:
                 spot_program = dict(charac)
-                _LOGGER.debug("BPC programmes — spot (index 1) programCharacteristics : %s", charac)
+                _LOGGER.debug("BPC programs — spot (index 1) programCharacteristics: %s", charac)
             elif idx == 2:
                 escalight_program = dict(charac)
-                _LOGGER.debug("BPC programmes — escalight (index 2) programCharacteristics : %s", charac)
+                _LOGGER.debug("BPC programs — escalight (index 2) programCharacteristics: %s", charac)
 
         return (
             filtration_mode, adapt_offset, spot_program, escalight_program,
@@ -451,13 +454,13 @@ class EasyCareClient:
             action_code = BPC_ACTION_OFF
             payload_extra = {}
         else:
-            raise ValueError(f"Action invalide : {action!r} (attendu 'on', 'boost' ou 'off')")
+            raise ValueError(f"Invalid action: {action!r} (expected 'on', 'boost' or 'off')")
 
         payload = {"pool": {"index": int(index), "action": action_code, **payload_extra}}
         path = API_PATH_BPC_MANUAL.format(
             watbox_serial=watbox.serial_number, bpc_name=bpc.short_name,
         )
-        _LOGGER.debug("BPC commande : %s voie %d", action_lower.upper(), index)
+        _LOGGER.debug("BPC command: %s channel %d", action_lower.upper(), index)
         await self._request("POST", API_HOST_EASYCARE, path, json_payload=payload)
 
         pool_cmd: dict[str, Any] = {"index": int(index), "action": action_code}
@@ -474,7 +477,7 @@ class EasyCareClient:
                 json_payload=report_payload,
             )
         except Exception as err:  # noqa: BLE001
-            _LOGGER.warning("Échec reportManualCommandSent (non-critique) : %s", err)
+            _LOGGER.warning("reportManualCommandSent failed (non-critical): %s", err)
         return True
 
     async def set_filtration_mode(self, mode: str) -> bool:
@@ -485,7 +488,7 @@ class EasyCareClient:
         """
         mode_upper = mode.upper().strip()
         if mode_upper not in FILTRATION_MODES:
-            raise ValueError(f"Mode invalide : {mode!r} (attendu : {', '.join(FILTRATION_MODES)})")
+            raise ValueError(f"Invalid mode: {mode!r} (expected: {', '.join(FILTRATION_MODES)})")
         await self._update_pump_program(mode=mode_upper)
         return True
 
@@ -500,16 +503,16 @@ class EasyCareClient:
         """
         boost_upper = boost_mode.upper().strip()
         if boost_upper not in BOOST_MODES:
-            raise ValueError(f"Mode boost invalide : {boost_mode!r}")
+            raise ValueError(f"Invalid boost mode: {boost_mode!r}")
         _boost_durations: dict[str, int] = {
             "BOOST4H": 240, "BOOST12H": 720, "BOOST24H": 1440,
             "BOOST36H": 2160, "BOOST48H": 2880, "BOOST72H": 4320,
         }
         duration_minutes = _boost_durations[boost_upper]
         if self._watbox is None or self._bpc is None:
-            _LOGGER.warning("start_boost: modules non disponibles")
+            _LOGGER.warning("start_boost: modules unavailable")
             return False
-        _LOGGER.debug("Démarrage boost %s (%d min) via action=boost", boost_upper, duration_minutes)
+        _LOGGER.debug("Starting boost %s (%d min) via action=boost", boost_upper, duration_minutes)
         return await self.set_bpc_manual(
             self._watbox, self._bpc,
             index=0, action="boost", duration_minutes=duration_minutes,
@@ -518,9 +521,9 @@ class EasyCareClient:
     async def cancel_boost(self) -> bool:
         """Annule le boost en cours (OFF manuel sur la voie pompe)."""
         if self._watbox is None or self._bpc is None:
-            _LOGGER.warning("cancel_boost: modules non disponibles")
+            _LOGGER.warning("cancel_boost: modules unavailable")
             return False
-        _LOGGER.debug("Annulation boost en cours via OFF manuel")
+        _LOGGER.debug("Cancelling current boost via manual OFF")
         return await self.set_bpc_manual(
             self._watbox, self._bpc, index=0, action="off",
         )
@@ -539,8 +542,8 @@ class EasyCareClient:
         """
         if mode_option not in FILTRATION_MODES_WITH_OFFSET:
             raise ValueError(
-                f"Mode invalide : {mode_option!r} "
-                f"(attendu : {', '.join(FILTRATION_MODES_WITH_OFFSET)})"
+                f"Invalid mode: {mode_option!r} "
+                f"(expected: {', '.join(FILTRATION_MODES_WITH_OFFSET)})"
             )
         if mode_option == MODE_AUTO_MINUS:
             await self._update_pump_program(mode=MODE_AUTO, adapt_offset=ADAPT_OFFSET_MINUS)
@@ -570,19 +573,19 @@ class EasyCareClient:
             adapt_offset: -60, 0 ou +60 minutes (None = conserver l'existant).
         """
         if self._watbox is None or self._bpc is None:
-            _LOGGER.warning("_update_pump_program: modules non disponibles")
+            _LOGGER.warning("_update_pump_program: modules unavailable")
             return
         path = API_PATH_BPC_PROGRAMS.format(
             watbox_serial=self._watbox.serial_number, bpc_name=self._bpc.short_name,
         )
         data = await self._request("GET", API_HOST_EASYCARE, path)
-        _LOGGER.debug("_update_pump_program GET — clés réponse : %s", list(data.keys()))
+        _LOGGER.debug("_update_pump_program GET — response keys: %s", list(data.keys()))
         programs = data.get("programs")
         if not programs:
-            _LOGGER.warning("_update_pump_program: aucun programme reçu — réponse : %s", data)
+            _LOGGER.warning("_update_pump_program: no program received — response: %s", data)
             return
         _LOGGER.debug(
-            "_update_pump_program: %d programme(s), indices=%s, bpc_module_id=%r",
+            "_update_pump_program: %d program(s), indices=%s, bpc_module_id=%r",
             len(programs), [p.get("index") for p in programs], self._bpc_module_id,
         )
         modified = False
@@ -591,8 +594,8 @@ class EasyCareClient:
                 charac = prog.get("programCharacteristics")
                 sched = prog.get("sched")
                 _LOGGER.debug(
-                    "_update_pump_program — programme pompe avant modif : "
-                    "clés_root=%s adaptOffset_root=%s sched=%s programCharacteristics=%s",
+                    "_update_pump_program — pump program before edit: "
+                    "root_keys=%s adaptOffset_root=%s sched=%s programCharacteristics=%s",
                     list(prog.keys()),
                     prog.get("adaptOffset"),
                     sched,
@@ -616,16 +619,16 @@ class EasyCareClient:
                         else:
                             prog["sched"] = [list(SCHED_AUTO_ROW_STD)] * 7
                             label = "AUTO-Standard"
-                        _LOGGER.debug("adaptOffset=%d → sched remplacé par table %s", adapt_offset, label)
+                        _LOGGER.debug("adaptOffset=%d → sched replaced by table %s", adapt_offset, label)
                     modified = True
                 else:
                     _LOGGER.warning(
-                        "_update_pump_program: programCharacteristics absent ou non-dict : %r", charac
+                        "_update_pump_program: programCharacteristics missing or non-dict: %r", charac
                     )
                 break
         if not modified:
             _LOGGER.warning(
-                "_update_pump_program: programme pompe (index 0) absent parmi %s",
+                "_update_pump_program: pump program (index 0) missing among %s",
                 [p.get("index") for p in programs],
             )
             return
@@ -640,7 +643,7 @@ class EasyCareClient:
             [{k: v for k, v in p.items() if k in ("index", "state", "adaptOffset", "programCharacteristics")} for p in programs],
         )
         await self._request("POST", API_HOST_EASYCARE, path, json_payload=post_payload)
-        _LOGGER.debug("_update_pump_program POST envoyé avec succès")
+        _LOGGER.debug("_update_pump_program POST sent successfully")
 
     async def _request(
         self,
@@ -692,9 +695,9 @@ class EasyCareClient:
                     if response.status == 401:
                         if _retry_count >= 1:
                             raise EasyCareUnauthorizedError(
-                                f"Bearer rejeté même après refresh : {url}"
+                                f"Bearer rejected even after refresh: {url}"
                             )
-                        _LOGGER.info("HTTP 401 sur %s — invalidation et retry", url)
+                        _LOGGER.info("HTTP 401 on %s — invalidating and retrying", url)
                         await self._auth.invalidate_bearer()
                         return await self._request(
                             method, host, path,
@@ -703,9 +706,9 @@ class EasyCareClient:
                         )
 
                     if response.status >= 400:
-                        _LOGGER.warning("HTTP %d sur %s %s", response.status, method, url)
+                        _LOGGER.warning("HTTP %d on %s %s", response.status, method, url)
                         raise EasyCareApiError(
-                            f"Échec {method} {path}",
+                            f"{method} {path} failed",
                             status_code=response.status, body=body,
                         )
 
@@ -716,15 +719,15 @@ class EasyCareClient:
                         return await response.json(content_type=None)
                     except (ValueError, aiohttp.ContentTypeError) as err:
                         raise EasyCareInvalidResponseError(
-                            f"Réponse non-JSON depuis {url} : {err}"
+                            f"Non-JSON response from {url}: {err}"
                         ) from err
 
             except asyncio.TimeoutError:
-                last_exc = EasyCareTimeoutError(f"Timeout sur {method} {url}")
-                _LOGGER.debug("Tentative %d/%d : timeout", attempt + 1, HTTP_MAX_RETRIES)
+                last_exc = EasyCareTimeoutError(f"Timeout on {method} {url}")
+                _LOGGER.debug("Attempt %d/%d: timeout", attempt + 1, HTTP_MAX_RETRIES)
             except ClientError as err:
-                last_exc = EasyCareConnectionError(f"Erreur réseau : {err}")
-                _LOGGER.debug("Tentative %d/%d : %s", attempt + 1, HTTP_MAX_RETRIES, err)
+                last_exc = EasyCareConnectionError(f"Network error: {err}")
+                _LOGGER.debug("Attempt %d/%d: %s", attempt + 1, HTTP_MAX_RETRIES, err)
 
             if attempt < HTTP_MAX_RETRIES - 1:
                 await asyncio.sleep(HTTP_RETRY_DELAY * (attempt + 1))
@@ -732,14 +735,33 @@ class EasyCareClient:
         assert last_exc is not None
         raise last_exc
 
+    # Préfixe de type acceptable par famille (issue #10) : une variante dont le
+    # `type` commence par ce préfixe est une déclinaison connue (gateway lr-bst-*,
+    # BPC lr-pc-*) → tolérée silencieusement, pas de warning à chaque poll.
+    _TYPE_FAMILY_PREFIX = {
+        MODULE_TYPE_WATBOX: MODULE_TYPE_PREFIX_WATBOX,
+        MODULE_TYPE_BPC: MODULE_TYPE_PREFIX_BPC,
+    }
+
     @staticmethod
     def _validate_module_type(module: Module, expected: str, role: str) -> None:
-        """Vérifie qu'un module a le bon type.
+        """Vérifie qu'un module a le bon type (warning si variante inconnue).
 
-        Raises:
-            ValueError: si le module n'a pas le type attendu.
+        Type exact ou alias reconnu (ex. `lr-ph` = BPC2) → OK. Variante de la même
+        famille (préfixe connu) → debug. Type vraiment inattendu → warning, mais on
+        tente quand même l'appel.
         """
-        if module.type != expected:
-            raise ValueError(
-                f"Module '{role}' a le type {module.type!r}, attendu {expected!r}"
+        if module.type == expected or module.type in MODULE_TYPE_ALIASES.get(expected, ()):
+            return
+        prefix = EasyCareClient._TYPE_FAMILY_PREFIX.get(expected)
+        if prefix and module.type.startswith(prefix):
+            _LOGGER.debug(
+                "Module '%s': type variant %r (family %r) — tolerated",
+                role, module.type, expected,
             )
+            return
+        _LOGGER.warning(
+            "Module '%s' has type %r instead of %r — unreferenced hardware "
+            "variant, attempting anyway. Please report this type in an issue.",
+            role, module.type, expected,
+        )

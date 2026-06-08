@@ -47,7 +47,10 @@ from .const import (
     DOMAIN,
     KNOWN_MODULE_TYPES,
     MODULE_TYPE_AC1,
+    MODULE_TYPE_ALIASES,
     MODULE_TYPE_BPC,
+    MODULE_TYPE_PREFIX_BPC,
+    MODULE_TYPE_PREFIX_WATBOX,
     MODULE_TYPE_PRESSURE,
     MODULE_TYPE_WATBOX,
     SCAN_INTERVAL_BPC,
@@ -263,16 +266,16 @@ class BPCData:
 def _wrap_api_error(err: Exception, context: str) -> Exception:
     """Convertit une exception du client API en exception HA appropriée."""
     if isinstance(err, EasyCareTokenExpiredError):
-        return ConfigEntryAuthFailed(f"{context} : refresh_token expiré")
+        return ConfigEntryAuthFailed(f"{context}: refresh_token expired")
     if isinstance(err, EasyCareUnauthorizedError):
-        return ConfigEntryAuthFailed(f"{context} : bearer rejeté de manière persistante")
+        return ConfigEntryAuthFailed(f"{context}: bearer persistently rejected")
     if isinstance(err, (EasyCareConnectionError, EasyCareTimeoutError)):
-        return UpdateFailed(f"{context} : erreur réseau : {err}")
+        return UpdateFailed(f"{context}: network error: {err}")
     if isinstance(err, EasyCareApiError):
-        return UpdateFailed(f"{context} : erreur API HTTP {err.status_code}")
+        return UpdateFailed(f"{context}: API HTTP error {err.status_code}")
     if isinstance(err, EasyCareInvalidResponseError):
-        return UpdateFailed(f"{context} : réponse API invalide : {err}")
-    return UpdateFailed(f"{context} : erreur inattendue : {err}")
+        return UpdateFailed(f"{context}: invalid API response: {err}")
+    return UpdateFailed(f"{context}: unexpected error: {err}")
 
 
 class EasyCareUserCoordinator(DataUpdateCoordinator[UserData]):
@@ -318,8 +321,8 @@ class EasyCareUserCoordinator(DataUpdateCoordinator[UserData]):
             )
         ):
             _LOGGER.warning(
-                "Métriques AC1 toutes None (réponse API vide ?) — "
-                "conservation des valeurs précédentes (pH=%s, T=%s°C, Cl=%s mV)",
+                "AC1 metrics all None (empty API response?) — "
+                "keeping previous values (pH=%s, T=%s°C, Cl=%s mV)",
                 prev.metrics.ph_value,
                 prev.metrics.temperature_value,
                 prev.metrics.chlorine_value,
@@ -327,7 +330,7 @@ class EasyCareUserCoordinator(DataUpdateCoordinator[UserData]):
             metrics = prev.metrics
 
         self._last_fetched_at = datetime.now(tz=timezone.utc)
-        _LOGGER.debug("User update OK : pH=%s, T=%s°C", metrics.ph_value, metrics.temperature_value)
+        _LOGGER.debug("User update OK: pH=%s, T=%s°C", metrics.ph_value, metrics.temperature_value)
         result = UserData(client=client, pool=pool, metrics=metrics, alerts=alerts, treatment=treatment)
         self._sync_pool_action_notifications(alerts)
         return result
@@ -353,7 +356,7 @@ class EasyCareUserCoordinator(DataUpdateCoordinator[UserData]):
         for action in active - self._notified_actions:
             messages = _POOL_ACTION_MESSAGES.get(action)
             message = messages[msg_lang] if messages else action
-            _LOGGER.info("Nouvelle action piscine détectée : %s", action)
+            _LOGGER.info("New pool action detected: %s", action)
             pn_create(
                 self.hass,
                 message=message,
@@ -362,15 +365,15 @@ class EasyCareUserCoordinator(DataUpdateCoordinator[UserData]):
             )
 
         for action in self._notified_actions - active:
-            _LOGGER.debug("Action piscine résolue : %s", action)
+            _LOGGER.debug("Pool action resolved: %s", action)
             pn_dismiss(self.hass, notification_id=f"easycare_bywaterair_pool_action_{action}")
 
         self._notified_actions = active
 
 
 # Préfixe attendu du champ `name` des modules (format TYPE-SERIAL), par type API.
-# Sert de repli quand le `type` retourné par l'API ne correspond à aucune valeur
-# connue (variantes matérielles dont le type diffère — issue #10).
+# Repli de dernier recours quand le `type` ne correspond ni à la valeur exacte ni
+# à un préfixe de type connu (variantes matérielles — issue #10).
 _MODULE_NAME_PREFIX: dict[str, str] = {
     MODULE_TYPE_WATBOX: "WATBOX",
     MODULE_TYPE_BPC: "BPC",
@@ -378,31 +381,47 @@ _MODULE_NAME_PREFIX: dict[str, str] = {
     MODULE_TYPE_PRESSURE: "LR-PR",
 }
 
+# Préfixe de TYPE couvrant toute une famille matérielle (issue #10). Le `type`
+# exact varie selon le modèle ; on reconnaît la famille via ce préfixe en plus du
+# type exact. Confirmé par reverse de l'app : lr-bst-* = gateways, lr-pc-* = BPC.
+_MODULE_TYPE_PREFIX: dict[str, str] = {
+    MODULE_TYPE_WATBOX: MODULE_TYPE_PREFIX_WATBOX,
+    MODULE_TYPE_BPC: MODULE_TYPE_PREFIX_BPC,
+}
+
 
 def _match_modules(
     modules: tuple[Module, ...], module_type: str
-) -> tuple[tuple[Module, ...], bool]:
-    """Résout les modules d'un type, avec repli par préfixe de nom.
+) -> tuple[tuple[Module, ...], str]:
+    """Résout les modules d'un type, par priorité décroissante.
 
-    Match d'abord sur le `type` officiel ; si aucun module ne correspond, repli
-    sur le préfixe attendu du champ `name` (`_MODULE_NAME_PREFIX`) pour gérer les
-    variantes matérielles dont le `type` diffère de la valeur attendue (issue #10).
+    Ordre : (1) `type` exact ou alias reconnu (`MODULE_TYPE_ALIASES`, ex. `lr-ph`
+    = BPC2) ; (2) préfixe de type (`_MODULE_TYPE_PREFIX`, ex. 'lr-bst-' pour
+    toutes les variantes de gateway) ; (3) préfixe du champ `name`
+    (`_MODULE_NAME_PREFIX`) en dernier recours. Gère les variantes matérielles
+    dont le `type` diffère de la valeur attendue (issue #10).
 
     Fonction pure (ne logge rien) pour être utilisable aussi bien sur `self.data`
     que sur la liste locale d'un cycle de refresh en cours.
 
     Returns:
-        (modules trouvés, repli_utilisé). `repli_utilisé` vaut True uniquement si
-        le match par `type` a échoué et que le repli par nom a produit un résultat.
+        (modules trouvés, kind) où kind ∈ {"type", "type_prefix", "name", "none"}.
     """
-    matched = tuple(m for m in modules if m.type == module_type)
+    accepted = (module_type, *MODULE_TYPE_ALIASES.get(module_type, ()))
+    matched = tuple(m for m in modules if m.type in accepted)
     if matched:
-        return matched, False
-    prefix = _MODULE_NAME_PREFIX.get(module_type)
-    if not prefix:
-        return (), False
-    fallback = tuple(m for m in modules if m.name.upper().startswith(prefix))
-    return fallback, bool(fallback)
+        return matched, "type"
+    type_prefix = _MODULE_TYPE_PREFIX.get(module_type)
+    if type_prefix:
+        by_type_prefix = tuple(m for m in modules if m.type.startswith(type_prefix))
+        if by_type_prefix:
+            return by_type_prefix, "type_prefix"
+    name_prefix = _MODULE_NAME_PREFIX.get(module_type)
+    if name_prefix:
+        by_name = tuple(m for m in modules if m.name.upper().startswith(name_prefix))
+        if by_name:
+            return by_name, "name"
+    return (), "none"
 
 
 class EasyCareModulesCoordinator(DataUpdateCoordinator[tuple[Module, ...]]):
@@ -426,15 +445,15 @@ class EasyCareModulesCoordinator(DataUpdateCoordinator[tuple[Module, ...]]):
         unknown = [(m.name, m.type) for m in modules if m.type not in KNOWN_MODULE_TYPES]
         if unknown:
             _LOGGER.warning(
-                "Module(s) de type inconnu détecté(s) : %s — non géré(s) par "
-                "l'intégration. Merci de signaler ces types dans une issue.",
+                "Unknown module type(s) detected: %s — not handled by the "
+                "integration. Please report these types in an issue.",
                 unknown,
             )
 
         watbox_matched, _ = _match_modules(modules, MODULE_TYPE_WATBOX)
         watbox = watbox_matched[0] if watbox_matched else None
         if watbox is None:
-            _LOGGER.debug("Modules update OK : %d module(s), pas de WATBOX pour check firmware", len(modules))
+            _LOGGER.debug("Modules update OK: %d module(s), no WATBOX for firmware check", len(modules))
             return modules
 
         enriched: list[Module] = []
@@ -447,26 +466,35 @@ class EasyCareModulesCoordinator(DataUpdateCoordinator[tuple[Module, ...]]):
                     if fw_data:
                         module = dataclasses.replace(module, firmware_available=fw_data)
                         _LOGGER.debug(
-                            "Firmware check %s : mise à jour disponible → %s", module.name, fw_data
+                            "Firmware check %s: update available → %s", module.name, fw_data
                         )
                     else:
-                        _LOGGER.debug("Firmware check %s : à jour", module.name)
+                        _LOGGER.debug("Firmware check %s: up to date", module.name)
                 except Exception as err:  # noqa: BLE001
-                    _LOGGER.warning("Firmware check %s ignoré : %s", module.name, err)
+                    _LOGGER.warning("Firmware check %s skipped: %s", module.name, err)
             enriched.append(module)
 
-        _LOGGER.debug("Modules update OK : %d module(s)", len(enriched))
+        _LOGGER.debug("Modules update OK: %d module(s)", len(enriched))
         return tuple(enriched)
 
     def _resolve_modules(self, module_type: str) -> tuple[Module, ...]:
-        """Comme `_match_modules` sur `self.data`, en loggant le repli éventuel."""
+        """Comme `_match_modules` sur `self.data`, en loggant les replis.
+
+        Préfixe de type → debug (variante de famille reconnue, attendu) ;
+        repli par nom → warning (dernier recours, type vraiment inattendu).
+        """
         if not self.data:
             return ()
-        modules, used_fallback = _match_modules(self.data, module_type)
-        if used_fallback:
+        modules, kind = _match_modules(self.data, module_type)
+        if kind == "type_prefix":
+            _LOGGER.debug(
+                "Module(s) %s recognised by type prefix: %s",
+                module_type, [(m.name, m.type) for m in modules],
+            )
+        elif kind == "name":
             _LOGGER.warning(
-                "Module(s) %s détecté(s) par repli sur le nom : %s — type "
-                "inattendu (attendu %r). Merci de signaler ce type dans une issue.",
+                "Module(s) %s detected by name fallback: %s — unexpected type "
+                "(expected %r). Please report this type in an issue.",
                 _MODULE_NAME_PREFIX.get(module_type),
                 [(m.name, m.type) for m in modules],
                 module_type,
@@ -536,7 +564,7 @@ class EasyCareBPCCoordinator(DataUpdateCoordinator[BPCData]):
         """Récupère l'état du BPC avec logique de polling adaptatif."""
         if self._should_skip_cycle():
             self._skipped_cycles += 1
-            _LOGGER.debug("BPC update SKIPPÉ (idle %d/%d)", self._skipped_cycles, SCAN_INTERVAL_BPC_IDLE_FACTOR)
+            _LOGGER.debug("BPC update SKIPPED (idle %d/%d)", self._skipped_cycles, SCAN_INTERVAL_BPC_IDLE_FACTOR)
             return self.data  # type: ignore[return-value]
 
         self._skipped_cycles = 0
@@ -545,10 +573,10 @@ class EasyCareBPCCoordinator(DataUpdateCoordinator[BPCData]):
         if watbox is None or bpc is None:
             available = [(m.name, m.type) for m in (self._modules.data or ())]
             _LOGGER.warning(
-                "BPC ou WATBOX introuvable — modules disponibles (name, type) : %s",
+                "BPC or WATBOX not found — available modules (name, type): %s",
                 available,
             )
-            raise UpdateFailed("BPC ou WATBOX absent de la liste des modules")
+            raise UpdateFailed("BPC or WATBOX missing from the module list")
 
         bpc_temp_reference: int | None = None
         try:
@@ -564,9 +592,9 @@ class EasyCareBPCCoordinator(DataUpdateCoordinator[BPCData]):
         # en silence (les index BPC sont codés en dur dans tout le code).
         if not any(i.index == 0 for i in inputs):
             _LOGGER.warning(
-                "BPC %s : voie pompe (index 0) absente des voies status %s — "
-                "pompe et boost indisponibles. Variante matérielle ? "
-                "Merci de signaler ce cas dans une issue.",
+                "BPC %s: pump channel (index 0) missing from status channels %s — "
+                "pump and boost unavailable. Hardware variant? "
+                "Please report this case in an issue.",
                 bpc.name, [i.index for i in inputs],
             )
 
@@ -574,7 +602,7 @@ class EasyCareBPCCoordinator(DataUpdateCoordinator[BPCData]):
         try:
             pool_status = await self._client.get_pool_status()
         except Exception as err:  # noqa: BLE001
-            _LOGGER.debug("get_pool_status échoué (non-fatal) : %s", err)
+            _LOGGER.debug("get_pool_status failed (non-fatal): %s", err)
 
         # Compteurs pompe — lus depuis les modules (getUserWithHisModules, 24h)
         pump_total_minutes: int | None = None
@@ -586,7 +614,7 @@ class EasyCareBPCCoordinator(DataUpdateCoordinator[BPCData]):
                 pump_total_minutes = output0.total_activation_time
                 pump_reset_date = output0.total_activation_time_reset_date
                 _LOGGER.debug(
-                    "Compteurs pompe : %s min depuis %s",
+                    "Pump counters: %s min since %s",
                     pump_total_minutes, pump_reset_date,
                 )
 
@@ -610,10 +638,10 @@ class EasyCareBPCCoordinator(DataUpdateCoordinator[BPCData]):
                 pump_program_remaining,
             ) = await self._client.get_bpc_programs_data()
         except Exception as err:  # noqa: BLE001
-            _LOGGER.debug("get_bpc_programs_data ignoré (non-fatal) : %s", err)
+            _LOGGER.debug("get_bpc_programs_data skipped (non-fatal): %s", err)
 
         _LOGGER.debug(
-            "BPC update OK : %d voie(s), mode=%s, adaptOffset=%d, bpc_temp_ref=%s°C",
+            "BPC update OK: %d channel(s), mode=%s, adaptOffset=%d, bpc_temp_ref=%s°C",
             len(inputs), filtration_mode, adapt_offset, bpc_temp_reference,
         )
         return BPCData(
@@ -658,6 +686,36 @@ class EasyCareCoordinators:
     user: EasyCareUserCoordinator
     modules: EasyCareModulesCoordinator
     bpc: EasyCareBPCCoordinator
+
+    def is_bpc_nonstandard(self) -> bool:
+        """Vrai si le BPC résolu n'est pas un BPC standard (`lr-pc` / `lr-pc-*`).
+
+        Couvre le BPC2 (type `lr-ph`, résolu par alias) et tout BPC résolu par
+        repli sur le nom. Sert à avertir l'utilisateur (issue #10) : l'agencement
+        des voies n'est pas garanti pour ces variantes matérielles.
+        """
+        bpc = self.modules.get_bpc()
+        if bpc is None:
+            return False
+        return bpc.type != MODULE_TYPE_BPC and not bpc.type.startswith(MODULE_TYPE_PREFIX_BPC)
+
+    @property
+    def bpc_nonstandard_type(self) -> str | None:
+        """Type brut du BPC s'il est non standard, sinon None (pour les messages UI)."""
+        if not self.is_bpc_nonstandard():
+            return None
+        bpc = self.modules.get_bpc()
+        return bpc.type if bpc is not None else None
+
+    def is_bpc_commands_blocked(self) -> bool:
+        """Vrai s'il faut bloquer les commandes BPC (voie pompe index 0 absente).
+
+        Preuve concrète que l'agencement des voies diffère : sans voie pompe à
+        l'index 0, les commandes basées sur les index codés en dur (pompe=0,
+        spot=1, escalight=2) seraient erronées. Fail-open si le BPC n'a pas
+        encore de données (renvoie False).
+        """
+        return self.bpc.data is not None and self.bpc.data.get_input(0) is None
 
     async def async_first_refresh(self) -> None:
         """Effectue le premier refresh de tous les coordinators.
