@@ -610,6 +610,20 @@ class TestCoordinatorsBpcHelpers:
         coords = self._make(bpc2, BPCData(inputs=(PUMP_INPUT_ON,)))
         assert coords.get_bpc_layout() is BPC_LAYOUT_UNKNOWN
 
+    def test_layout_bpc2_generic_station_names_is_unknown(self):
+        # FAIT RÉEL (log lr-pc 2026-06-08) : l'API renvoie des noms génériques
+        # "Station N" sans info de rôle → résolution par nom échoue → fail-safe.
+        bpc2 = Module(
+            type=MODULE_TYPE_BPC2, name="BPC2-D36C1B", id="b", serial_number="D",
+            outputs=(
+                ModuleOutput(index=0, name="Station 1", id="o0"),
+                ModuleOutput(index=1, name="Station 2", id="o1"),
+                ModuleOutput(index=2, name="Station 3", id="o2"),
+            ),
+        )
+        coords = self._make(bpc2, BPCData(inputs=(PUMP_INPUT_ON,)))
+        assert coords.get_bpc_layout() is BPC_LAYOUT_UNKNOWN
+
     def test_layout_bpc2_resolves_roles_by_name(self):
         bpc2 = Module(
             type=MODULE_TYPE_BPC2, name="BPC2-D36C1B", id="b", serial_number="D",

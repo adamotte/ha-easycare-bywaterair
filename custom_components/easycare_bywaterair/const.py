@@ -120,10 +120,14 @@ BPC_INDEX_ESCALIGHT: Final = 2
 
 # Mots-clés de nom de voie (champ `outputs[].name` de l'API) → rôle, pour la
 # résolution dynamique de l'agencement d'un BPC2 (issue #11). Comparaison en
-# minuscules par sous-chaîne. ⚠️ Les noms réels renvoyés par l'API ne sont PAS
-# confirmés (« escalight » est absent du DEX) : ce sont des hypothèses à valider
-# sur un log BPC2 réel. La résolution reste fail-safe — un rôle non trouvé reste
-# désactivé (aucune commande).
+# minuscules par sous-chaîne.
+# ⚠️ FAIT CONFIRMÉ (log réel lr-pc, 2026-06-08) : par défaut l'API renvoie des
+# noms GÉNÉRIQUES hérités de Solem — « Station 1 / Station 2 / Station 3 » — qui
+# ne portent AUCUNE info de rôle. La résolution par nom échoue donc presque
+# toujours (→ BPC_LAYOUT_UNKNOWN, fail-safe), sauf si l'utilisateur a renommé ses
+# voies. Le vrai mécanisme du BPC2 sera un layout à INDEX FIXES par classe produit
+# (LRPH), à figer dès qu'une capture réelle d'un BPC2 donne le nombre de voies et
+# l'index de la doseuse pH. Ces mots-clés ne sont qu'un best-effort bonus.
 BPC_OUTPUT_NAME_PUMP: Final = ("pompe", "pump")
 BPC_OUTPUT_NAME_SPOT: Final = ("spot", "projecteur")
 BPC_OUTPUT_NAME_ESCALIGHT: Final = ("escalight", "escalier", "marche", "aux")
