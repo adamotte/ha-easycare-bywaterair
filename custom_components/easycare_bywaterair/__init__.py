@@ -126,6 +126,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await _async_register_devices(hass, entry, coordinators)
     _async_manage_bpc_issue(hass, entry, coordinators)
+    _async_log_bpc_diagnostics(coordinators)
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = coordinators
@@ -236,6 +237,40 @@ def _async_manage_bpc_issue(
             "issues_url": "https://github.com/adamotte/ha-easycare-bywaterair/issues",
         },
     )
+
+
+def _async_log_bpc_diagnostics(coordinators: EasyCareCoordinators) -> None:
+    """Logue l'inventaire des voies du BPC à des fins de diagnostic (issue #11).
+
+    Pour les variantes non standard (BPC2 `lr-ph`), l'agencement des voies n'est
+    pas garanti : les index codés en dur (pompe=0, spot=1, escalight=2) peuvent
+    différer. Ce log expose les sorties réelles (`index:nom`) **et les clés brutes
+    du module**, afin qu'un utilisateur BPC2 puisse les remonter — ce qui révèle
+    l'index réel de la doseuse pH (`phOutput`) et les champs pH non encore parsés
+    (`pHPumpFlow`, `pHSetpoint`…). Purement diagnostic : aucune commande n'est
+    envoyée. Niveau INFO pour les variantes non standard (rare, ciblé), DEBUG
+    sinon.
+    """
+    bpc = coordinators.modules.get_bpc()
+    if bpc is None:
+        return
+    if bpc.outputs:
+        channels = ", ".join(f"{o.index}:{o.name!r}" for o in bpc.outputs)
+    else:
+        channels = "<none returned by API>"
+    if coordinators.is_bpc_nonstandard():
+        raw_keys = ", ".join(sorted(bpc.raw)) if bpc.raw else "<empty>"
+        _LOGGER.info(
+            "BPC diagnostic (non-standard variant: type=%s, name=%s): "
+            "%d input(s), output channels=[%s]. Module keys=[%s]. "
+            "Please report these details to help add full BPC2 support (issue #11).",
+            bpc.type, bpc.name, bpc.number_of_inputs, channels, raw_keys,
+        )
+    else:
+        _LOGGER.debug(
+            "BPC channel inventory (type=%s): %d input(s), output channels=[%s]",
+            bpc.type, bpc.number_of_inputs, channels,
+        )
 
 
 def _ensure_bpc_commands_enabled(coords: EasyCareCoordinators) -> None:
