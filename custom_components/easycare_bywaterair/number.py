@@ -85,10 +85,10 @@ class EasyCareDurationNumberBase(
         ):
             try:
                 self._attr_native_value = float(last_state.state)
-                _LOGGER.debug("%s : durée restaurée à %.1fh", self.unique_id, self._attr_native_value)
+                _LOGGER.debug("%s: duration restored to %.1fh", self.unique_id, self._attr_native_value)
             except (ValueError, TypeError):
                 _LOGGER.warning(
-                    "Impossible de restaurer la durée %s (valeur=%r), utilisation du défaut",
+                    "Could not restore duration %s (value=%r), using default",
                     self.unique_id, last_state.state,
                 )
 
@@ -96,7 +96,7 @@ class EasyCareDurationNumberBase(
         """Sauvegarde la nouvelle valeur."""
         self._attr_native_value = float(value)
         self.async_write_ha_state()
-        _LOGGER.debug("%s : nouvelle durée %.1fh", self.unique_id, value)
+        _LOGGER.debug("%s: new duration %.1fh", self.unique_id, value)
 
 
 class EasyCareSpotDurationNumber(EasyCareDurationNumberBase):

@@ -122,14 +122,14 @@ class EasyCareConfigFlow(ConfigFlow, domain=DOMAIN):
         except EasyCareInvalidCredentialsError:
             errors["base"] = "invalid_credentials"
         except EasyCareLoginError:
-            _LOGGER.exception("Échec du flow de login Azure B2C")
+            _LOGGER.exception("Azure B2C login flow failed")
             errors["base"] = "login_failed"
         except EasyCareTimeoutError:
             errors["base"] = "timeout"
         except EasyCareConnectionError:
             errors["base"] = "cannot_connect"
         except EasyCareError:
-            _LOGGER.exception("Erreur inattendue pendant le config flow")
+            _LOGGER.exception("Unexpected error during config flow")
             errors["base"] = "unknown"
         else:
             if not pool_labels:

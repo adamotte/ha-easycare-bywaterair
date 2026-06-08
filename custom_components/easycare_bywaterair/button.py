@@ -47,7 +47,7 @@ class EasyCareRefreshButton(
         import asyncio
 
         coords: EasyCareCoordinators = self.hass.data[DOMAIN][self._entry.entry_id]
-        _LOGGER.info("Refresh manuel déclenché par l'utilisateur")
+        _LOGGER.info("Manual refresh triggered by the user")
         await asyncio.gather(
             coords.user.async_request_refresh(),
             coords.modules.async_request_refresh(),
