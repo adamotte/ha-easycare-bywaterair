@@ -22,12 +22,16 @@ from custom_components.easycare_bywaterair.api.models import (
     BPCInput,
     Metrics,
     Module,
+    ModuleOutput,
     Notification,
     PoolStatus,
 )
 from custom_components.easycare_bywaterair.const import (
+    BPC_LAYOUT_STANDARD,
+    BPC_LAYOUT_UNKNOWN,
     MODULE_TYPE_AC1,
     MODULE_TYPE_BPC,
+    MODULE_TYPE_BPC2,
     MODULE_TYPE_PRESSURE,
     MODULE_TYPE_WATBOX,
 )
@@ -576,6 +580,54 @@ class TestCoordinatorsBpcHelpers:
         coords = self._make(None, None)
         assert coords.is_bpc_nonstandard() is False
         assert coords.bpc_nonstandard_type is None
+
+    # --- get_bpc_layout (issue #11) ---
+
+    def test_layout_standard_bpc(self):
+        coords = self._make(BPC_MODULE, BPCData(inputs=(PUMP_INPUT_ON,)))
+        assert coords.get_bpc_layout() is BPC_LAYOUT_STANDARD
+
+    def test_layout_bpc_prefix_variant_is_standard(self):
+        # lr-pc-vs2 → BPC standard (préfixe lr-pc-).
+        coords = self._make(BPC_TYPE_VARIANT, BPCData(inputs=(PUMP_INPUT_ON,)))
+        assert coords.get_bpc_layout() is BPC_LAYOUT_STANDARD
+
+    def test_layout_no_bpc_is_unknown(self):
+        coords = self._make(None, None)
+        assert coords.get_bpc_layout() is BPC_LAYOUT_UNKNOWN
+
+    def test_layout_bpc2_without_outputs_is_unknown(self):
+        bpc2 = Module(type=MODULE_TYPE_BPC2, name="BPC2-D36C1B", id="b", serial_number="D")
+        coords = self._make(bpc2, BPCData(inputs=(PUMP_INPUT_ON,)))
+        assert coords.get_bpc_layout() is BPC_LAYOUT_UNKNOWN
+
+    def test_layout_bpc2_without_pump_channel_is_unknown(self):
+        # Pas de voie pompe identifiable → fail-safe, aucune commande.
+        bpc2 = Module(
+            type=MODULE_TYPE_BPC2, name="BPC2-X", id="b", serial_number="D",
+            outputs=(ModuleOutput(index=1, name="spot", id="o1"),),
+        )
+        coords = self._make(bpc2, BPCData(inputs=(PUMP_INPUT_ON,)))
+        assert coords.get_bpc_layout() is BPC_LAYOUT_UNKNOWN
+
+    def test_layout_bpc2_resolves_roles_by_name(self):
+        bpc2 = Module(
+            type=MODULE_TYPE_BPC2, name="BPC2-D36C1B", id="b", serial_number="D",
+            outputs=(
+                ModuleOutput(index=0, name="pompe", id="o0"),
+                ModuleOutput(index=1, name="spot", id="o1"),
+                ModuleOutput(index=4, name="doseuse pH", id="o4"),
+            ),
+        )
+        layout = self._make(bpc2, BPCData(inputs=(PUMP_INPUT_ON,))).get_bpc_layout()
+        assert layout.pump_index == 0
+        assert layout.spot_index == 1
+        assert layout.escalight_index is None
+        assert layout.ph_pump_index == 4
+        assert layout.filtration_supported is True
+        assert layout.boost_supported is True
+        assert layout.lights_supported is True
+        assert layout.ph_supported is True
 
     def test_commands_blocked_when_pump_channel_missing(self):
         coords = self._make(BPC2_MODULE, BPCData(inputs=(BPCInput(index=1, value=1),)))

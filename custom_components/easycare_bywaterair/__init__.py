@@ -258,18 +258,19 @@ def _async_log_bpc_diagnostics(coordinators: EasyCareCoordinators) -> None:
         channels = ", ".join(f"{o.index}:{o.name!r}" for o in bpc.outputs)
     else:
         channels = "<none returned by API>"
+    layout = coordinators.get_bpc_layout()
     if coordinators.is_bpc_nonstandard():
         raw_keys = ", ".join(sorted(bpc.raw)) if bpc.raw else "<empty>"
         _LOGGER.info(
             "BPC diagnostic (non-standard variant: type=%s, name=%s): "
-            "%d input(s), output channels=[%s]. Module keys=[%s]. "
+            "%d input(s), output channels=[%s]. Resolved layout=%s. Module keys=[%s]. "
             "Please report these details to help add full BPC2 support (issue #11).",
-            bpc.type, bpc.name, bpc.number_of_inputs, channels, raw_keys,
+            bpc.type, bpc.name, bpc.number_of_inputs, channels, layout, raw_keys,
         )
     else:
         _LOGGER.debug(
-            "BPC channel inventory (type=%s): %d input(s), output channels=[%s]",
-            bpc.type, bpc.number_of_inputs, channels,
+            "BPC channel inventory (type=%s): %d input(s), output channels=[%s]. Resolved layout=%s",
+            bpc.type, bpc.number_of_inputs, channels, layout,
         )
 
 

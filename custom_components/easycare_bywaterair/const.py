@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import timedelta
 from typing import Final
 
@@ -72,6 +73,11 @@ MODULE_TYPE_PRESSURE: Final = "lr-pr"
 MODULE_TYPE_PREFIX_WATBOX: Final = "lr-bst-"
 MODULE_TYPE_PREFIX_BPC: Final = "lr-pc-"
 
+# BPC2 (classe DEX `LRPH`) : contrôleur piscine Waterair à régulation pH, type
+# `lr-ph`, nom `BPC2-…`. Résolu comme un BPC (alias ci-dessous) mais agencement
+# des voies non garanti — voir BPCLayout.
+MODULE_TYPE_BPC2: Final = "lr-ph"
+
 # Types supplémentaires reconnus pour un rôle, au-delà du type exact et du préfixe
 # de famille (issue #10). `lr-ph` = type renvoyé par les modules nommés "BPC2-…"
 # (confirmé par un log utilisateur réel : "BPC2-D36C1B", type "lr-ph"). C'est un
@@ -83,7 +89,7 @@ MODULE_TYPE_PREFIX_BPC: Final = "lr-pc-"
 # (pompe=0, spot=1, escalight=2) ne sont PAS garantis pour le BPC2. À valider sur
 # les données réelles d'un BPC2 avant de garantir pompe/boost/lumières.
 MODULE_TYPE_ALIASES: Final[dict[str, tuple[str, ...]]] = {
-    MODULE_TYPE_BPC: ("lr-ph",),
+    MODULE_TYPE_BPC: (MODULE_TYPE_BPC2,),
 }
 
 # Types de modules attendus dans une piscine Waterair easy·care (codes API minuscules).
@@ -105,12 +111,61 @@ KNOWN_MODULE_TYPES: Final = frozenset({
     MODULE_TYPE_PRESSURE,  # lr-pr
     # BPC2 (BPC à régulation pH intégrée) — confirmé via log utilisateur réel
     # (module "BPC2-…" de type "lr-ph"). Aussi alias BPC dans MODULE_TYPE_ALIASES.
-    "lr-ph",
+    MODULE_TYPE_BPC2,  # lr-ph
 })
 
 BPC_INDEX_PUMP: Final = 0
 BPC_INDEX_SPOT: Final = 1
 BPC_INDEX_ESCALIGHT: Final = 2
+
+# Mots-clés de nom de voie (champ `outputs[].name` de l'API) → rôle, pour la
+# résolution dynamique de l'agencement d'un BPC2 (issue #11). Comparaison en
+# minuscules par sous-chaîne. ⚠️ Les noms réels renvoyés par l'API ne sont PAS
+# confirmés (« escalight » est absent du DEX) : ce sont des hypothèses à valider
+# sur un log BPC2 réel. La résolution reste fail-safe — un rôle non trouvé reste
+# désactivé (aucune commande).
+BPC_OUTPUT_NAME_PUMP: Final = ("pompe", "pump")
+BPC_OUTPUT_NAME_SPOT: Final = ("spot", "projecteur")
+BPC_OUTPUT_NAME_ESCALIGHT: Final = ("escalight", "escalier", "marche", "aux")
+BPC_OUTPUT_NAME_PH: Final = ("doseuse", "fcs", "ph")
+
+
+@dataclass(frozen=True, slots=True)
+class BPCLayout:
+    """Agencement des voies d'un BPC + capacités de commande (issue #11).
+
+    Un `*_index` à None = voie non confirmée pour cette variante matérielle. Une
+    commande n'est autorisée que si son index est connu ET le flag de capacité
+    correspondant est vrai. Conçu défensif : tout est None/False par défaut
+    (fail-safe), de sorte qu'une variante inconnue ne déclenche aucune commande.
+    """
+
+    pump_index: int | None = None
+    spot_index: int | None = None
+    escalight_index: int | None = None
+    ph_pump_index: int | None = None
+    filtration_supported: bool = False
+    boost_supported: bool = False
+    lights_supported: bool = False
+    ph_supported: bool = False
+
+
+# Agencement confirmé du BPC standard (lr-pc / lr-pc-*) — validé terrain (photo
+# utilisateur : bornes 3/4=pompe=0, 5/6=spot=1, 7/8=AUX/escalight=2).
+BPC_LAYOUT_STANDARD: Final = BPCLayout(
+    pump_index=BPC_INDEX_PUMP,
+    spot_index=BPC_INDEX_SPOT,
+    escalight_index=BPC_INDEX_ESCALIGHT,
+    ph_pump_index=None,
+    filtration_supported=True,
+    boost_supported=True,
+    lights_supported=True,
+    ph_supported=False,
+)
+
+# Agencement inconnu (variante matérielle non vérifiée) — fail-safe total :
+# aucune voie, aucune commande. Renvoyé tant qu'un BPC2 n'est pas caractérisé.
+BPC_LAYOUT_UNKNOWN: Final = BPCLayout()
 
 BPC_ACTION_OFF: Final = 1
 BPC_ACTION_ON: Final = 2

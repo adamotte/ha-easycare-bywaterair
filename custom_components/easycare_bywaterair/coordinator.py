@@ -44,11 +44,19 @@ from .api.models import (
     Treatment,
 )
 from .const import (
+    BPC_LAYOUT_STANDARD,
+    BPC_LAYOUT_UNKNOWN,
+    BPC_OUTPUT_NAME_ESCALIGHT,
+    BPC_OUTPUT_NAME_PH,
+    BPC_OUTPUT_NAME_PUMP,
+    BPC_OUTPUT_NAME_SPOT,
+    BPCLayout,
     DOMAIN,
     KNOWN_MODULE_TYPES,
     MODULE_TYPE_AC1,
     MODULE_TYPE_ALIASES,
     MODULE_TYPE_BPC,
+    MODULE_TYPE_BPC2,
     MODULE_TYPE_PREFIX_BPC,
     MODULE_TYPE_PREFIX_WATBOX,
     MODULE_TYPE_PRESSURE,
@@ -676,6 +684,51 @@ class EasyCareBPCCoordinator(DataUpdateCoordinator[BPCData]):
         await self.async_request_refresh()
 
 
+def _resolve_bpc2_layout(module: Module) -> BPCLayout:
+    """Résout l'agencement d'un BPC2 (lr-ph) depuis `outputs[].name` (issue #11).
+
+    Défensif : un rôle n'est activé que si une voie correspondante est trouvée
+    par nom. Sans `outputs`, ou si la pompe est introuvable, renvoie
+    BPC_LAYOUT_UNKNOWN → aucune commande. Anti-collision : une même voie ne peut
+    pas porter deux rôles. Les noms API réels ne sont PAS confirmés ; à valider
+    sur un log BPC2 réel avant de débloquer les commandes.
+    """
+    if not module.outputs:
+        return BPC_LAYOUT_UNKNOWN
+
+    def _find(keywords: tuple[str, ...]) -> int | None:
+        for output in module.outputs:
+            name = output.name.lower()
+            if any(keyword in name for keyword in keywords):
+                return output.index
+        return None
+
+    pump = _find(BPC_OUTPUT_NAME_PUMP)
+    if pump is None:
+        # Sans voie pompe identifiée, on ne peut rien garantir : fail-safe.
+        return BPC_LAYOUT_UNKNOWN
+    spot = _find(BPC_OUTPUT_NAME_SPOT)
+    escalight = _find(BPC_OUTPUT_NAME_ESCALIGHT)
+    ph_pump = _find(BPC_OUTPUT_NAME_PH)
+    # Anti-collision : une voie déjà attribuée ne peut pas porter un autre rôle.
+    if spot == pump:
+        spot = None
+    if escalight in (pump, spot):
+        escalight = None
+    if ph_pump in (pump, spot, escalight):
+        ph_pump = None
+    return BPCLayout(
+        pump_index=pump,
+        spot_index=spot,
+        escalight_index=escalight,
+        ph_pump_index=ph_pump,
+        filtration_supported=True,
+        boost_supported=True,
+        lights_supported=(spot is not None or escalight is not None),
+        ph_supported=(ph_pump is not None),
+    )
+
+
 @dataclass
 class EasyCareCoordinators:
     """Agrégat des 3 coordinators d'une intégration.
@@ -716,6 +769,22 @@ class EasyCareCoordinators:
         encore de données (renvoie False).
         """
         return self.bpc.data is not None and self.bpc.data.get_input(0) is None
+
+    def get_bpc_layout(self) -> BPCLayout:
+        """Résout l'agencement des voies du BPC résolu (issue #11).
+
+        Priorité : type standard (lr-pc / lr-pc-*) → BPC_LAYOUT_STANDARD (validé
+        terrain) ; BPC2 (lr-ph) → résolution dynamique par `outputs[].name` ;
+        toute autre variante, ou pas de BPC → BPC_LAYOUT_UNKNOWN (fail-safe).
+        """
+        bpc = self.modules.get_bpc()
+        if bpc is None:
+            return BPC_LAYOUT_UNKNOWN
+        if bpc.type == MODULE_TYPE_BPC or bpc.type.startswith(MODULE_TYPE_PREFIX_BPC):
+            return BPC_LAYOUT_STANDARD
+        if bpc.type == MODULE_TYPE_BPC2:
+            return _resolve_bpc2_layout(bpc)
+        return BPC_LAYOUT_UNKNOWN
 
     async def async_first_refresh(self) -> None:
         """Effectue le premier refresh de tous les coordinators.
