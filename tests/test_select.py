@@ -6,7 +6,10 @@ from unittest.mock import AsyncMock, call
 
 import pytest
 
-from tests.helpers import get_entity_id, setup_integration
+from custom_components.easycare_bywaterair.api.models import BPCInput, Module
+from custom_components.easycare_bywaterair.const import BPC_INDEX_SPOT
+
+from tests.helpers import WATBOX_MODULE, get_entity_id, setup_integration
 
 
 async def test_select_filtration_mode_current_option_auto(hass, mock_config_entry, mock_client):
@@ -84,3 +87,18 @@ async def test_select_boost_cancel_calls_client(hass, mock_config_entry, mock_cl
     )
 
     mock_client.cancel_boost.assert_called_once()
+
+
+async def test_select_not_created_when_bpc_commands_blocked(hass, mock_config_entry, mock_client):
+    """Aucun sélecteur créé si la voie pompe (index 0) est absente (BPC2/lr-ph — issue #10)."""
+    bpc2 = Module(
+        type="lr-ph", name="BPC2-D36C1B", id="bpc2", serial_number="D36C1B",
+        number_of_inputs=2,
+    )
+    mock_client.get_modules = AsyncMock(return_value=(WATBOX_MODULE, bpc2))
+    mock_client.get_bpc_status = AsyncMock(
+        return_value=((BPCInput(index=BPC_INDEX_SPOT, value=0),), 27)
+    )
+    entry = await setup_integration(hass, mock_config_entry, mock_client)
+    assert get_entity_id(hass, "select", entry.entry_id, "filtration_mode_select") is None
+    assert get_entity_id(hass, "select", entry.entry_id, "boost_select") is None

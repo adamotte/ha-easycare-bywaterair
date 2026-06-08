@@ -240,5 +240,20 @@
       "name": "Refresh data",
       "description": "Force a refresh from Waterair servers."
     }
+  },
+  "issues": {
+    "bpc_unsupported_variant": {
+      "title": "BPC variant not fully supported",
+      "description": "Your BPC reports an unrecognised hardware type (`{bpc_type}`, device \"{bpc_name}\"). Sensors work normally, but pump, boost, lighting and filtration-mode commands may be unreliable on this variant because its channel layout is not yet verified. Please report this type on the [issue tracker](https://github.com/adamotte/ha-easycare-bywaterair/issues) so full support can be added."
+    },
+    "bpc_commands_blocked": {
+      "title": "BPC commands disabled (unsupported variant)",
+      "description": "Your BPC (`{bpc_type}`, device \"{bpc_name}\") does not expose the expected pump channel, so its channel layout is unknown. To avoid sending incorrect commands, pump, boost, lighting and filtration-mode controls have been disabled; read-only sensors remain available. Please report this on the [issue tracker](https://github.com/adamotte/ha-easycare-bywaterair/issues) with your debug logs."
+    }
+  },
+  "exceptions": {
+    "bpc_commands_blocked_service": {
+      "message": "BPC commands are disabled for this unsupported hardware variant (unknown channel layout). Read-only sensors remain available."
+    }
   }
 }

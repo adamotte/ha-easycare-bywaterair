@@ -46,7 +46,18 @@ async def async_setup_entry(
     entities: list[LightEntity] = []
 
     if bpc is None:
-        _LOGGER.debug("Pas de BPC détecté — aucune lumière créée")
+        _LOGGER.debug("No BPC detected — no lights created")
+        async_add_entities(entities)
+        return
+
+    # Garde-fou variantes matérielles (issue #10) : si la voie pompe (index 0)
+    # est absente, l'agencement des voies du BPC n'est pas fiable → on ne crée pas
+    # les lumières de commande pour éviter d'agir sur la mauvaise voie.
+    if coordinators.is_bpc_commands_blocked():
+        _LOGGER.warning(
+            "BPC light commands disabled: pump channel (index 0) missing — "
+            "unverified channel layout (non-standard BPC variant). Read-only sensors remain."
+        )
         async_add_entities(entities)
         return
 
@@ -57,7 +68,7 @@ async def async_setup_entry(
         entities.append(EasyCareEscalightLight(coordinators.bpc, entry))
 
     if entities:
-        _LOGGER.debug("Création de %d lumière(s) BPC (numberOfInputs=%d)", len(entities), n)
+        _LOGGER.debug("Creating %d BPC light(s) (numberOfInputs=%d)", len(entities), n)
 
     async_add_entities(entities)
 
@@ -104,7 +115,7 @@ class EasyCareBPCLight(EasyCareBPCEntity[EasyCareBPCCoordinator], LightEntity):
                 bpc_input = data.get_input(self._bpc_index)
                 if bpc_input is not None and bpc_input.is_on == self._optimistic_is_on:
                     _LOGGER.debug(
-                        "Voie BPC %d : état optimiste '%s' confirmé par le coordinateur",
+                        "BPC channel %d: optimistic state '%s' confirmed by coordinator",
                         self._bpc_index, self._optimistic_is_on,
                     )
                     self._optimistic_is_on = None
@@ -136,13 +147,13 @@ class EasyCareBPCLight(EasyCareBPCEntity[EasyCareBPCCoordinator], LightEntity):
         duration_hours = self._get_configured_duration_hours()
         duration_minutes = int(duration_hours * 60)
 
-        _LOGGER.info("Allumage de la voie BPC %d pour %d minutes", self._bpc_index, duration_minutes)
+        _LOGGER.info("Turning on BPC channel %d for %d minutes", self._bpc_index, duration_minutes)
 
         coordinators: EasyCareCoordinators = self.hass.data[DOMAIN][self._entry.entry_id]
         watbox = coordinators.modules.get_watbox()
         bpc = coordinators.modules.get_bpc()
         if watbox is None or bpc is None:
-            _LOGGER.error("WATBOX ou BPC introuvable")
+            _LOGGER.error("WATBOX or BPC not found")
             return
 
         client = coordinators.user._client  # noqa: SLF001
@@ -161,13 +172,13 @@ class EasyCareBPCLight(EasyCareBPCEntity[EasyCareBPCCoordinator], LightEntity):
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Éteint la lumière via la commande BPC manual."""
-        _LOGGER.info("Extinction de la voie BPC %d", self._bpc_index)
+        _LOGGER.info("Turning off BPC channel %d", self._bpc_index)
 
         coordinators: EasyCareCoordinators = self.hass.data[DOMAIN][self._entry.entry_id]
         watbox = coordinators.modules.get_watbox()
         bpc = coordinators.modules.get_bpc()
         if watbox is None or bpc is None:
-            _LOGGER.error("WATBOX ou BPC introuvable")
+            _LOGGER.error("WATBOX or BPC not found")
             return
 
         client = coordinators.user._client  # noqa: SLF001

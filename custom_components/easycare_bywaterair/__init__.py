@@ -10,8 +10,8 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall
-from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.helpers import device_registry as dr
+from homeassistant.exceptions import ConfigEntryNotReady, ServiceValidationError
+from homeassistant.helpers import device_registry as dr, issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api.auth import EasyCareAuth
@@ -77,6 +77,9 @@ SERVICE_START_BOOST_SCHEMA = vol.Schema({
     vol.Required("duration"): vol.In(BOOST_MODES),
 })
 
+# Identifiant de base du repair issue "BPC non standard" (issue #10).
+ISSUE_BPC_VARIANT: Final = "bpc_variant"
+
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Initialise une intégration Easy-care depuis un ConfigEntry."""
@@ -86,7 +89,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         oauth_tokens = _load_oauth_tokens(entry)
         bearer = _load_bearer(entry)
     except KeyError as err:
-        _LOGGER.error("ConfigEntry corrompu : champ manquant %s", err)
+        _LOGGER.error("Corrupted ConfigEntry: missing field %s", err)
         return False
 
     session = async_get_clientsession(hass)
@@ -117,11 +120,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     try:
         await coordinators.async_first_refresh()
     except EasyCareTokenExpiredError as err:
-        raise ConfigEntryNotReady(f"Tokens Azure expirés : {err}") from err
+        raise ConfigEntryNotReady(f"Azure tokens expired: {err}") from err
     except EasyCareError as err:
-        raise ConfigEntryNotReady(f"Échec du premier refresh : {err}") from err
+        raise ConfigEntryNotReady(f"First refresh failed: {err}") from err
 
     await _async_register_devices(hass, entry, coordinators)
+    _async_manage_bpc_issue(hass, entry, coordinators)
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = coordinators
@@ -131,7 +135,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(entry.add_update_listener(_async_entry_updated))
 
     _LOGGER.info(
-        "Easy-care by Waterair initialisé (pool_id=%d, %d module(s))",
+        "Easy-care by Waterair initialised (pool_id=%d, %d module(s))",
         pool_id, len(coordinators.modules.data or ()),
     )
     return True
@@ -166,6 +170,7 @@ async def _async_register_devices(
             identifiers={(DOMAIN, f"{entry.entry_id}_{DEVICE_ID_WATBOX}")},
             manufacturer=MANUFACTURER, model="WATBOX",
             name=watbox.name, serial_number=watbox.serial_number,
+            hw_version=watbox.type,
         )
 
     bpc = coordinators.modules.get_bpc()
@@ -175,6 +180,7 @@ async def _async_register_devices(
             identifiers={(DOMAIN, f"{entry.entry_id}_{DEVICE_ID_BPC}")},
             manufacturer=MANUFACTURER, model="BPC (Boîtier Piscine Connecté)",
             name=bpc.name, serial_number=bpc.serial_number,
+            hw_version=bpc.type,
             via_device=(DOMAIN, f"{entry.entry_id}_{DEVICE_ID_WATBOX}"),
         )
 
@@ -186,6 +192,7 @@ async def _async_register_devices(
             identifiers={(DOMAIN, f"{entry.entry_id}_{DEVICE_ID_AC1}")},
             manufacturer=MANUFACTURER, model="AC1 (Analyseur Connecté)",
             name=ac1.name, serial_number=ac1.serial_number,
+            hw_version=ac1.type,
             via_device=(DOMAIN, f"{entry.entry_id}_{DEVICE_ID_WATBOX}"),
         )
 
@@ -197,7 +204,45 @@ async def _async_register_devices(
             identifiers={(DOMAIN, f"{entry.entry_id}_{DEVICE_ID_PRESSURE}")},
             manufacturer=MANUFACTURER, model="LR-PR (Capteur Pression)",
             name=lrpr.name, serial_number=lrpr.serial_number,
+            hw_version=lrpr.type,
             via_device=(DOMAIN, f"{entry.entry_id}_{DEVICE_ID_WATBOX}"),
+        )
+
+
+def _async_manage_bpc_issue(
+    hass: HomeAssistant, entry: ConfigEntry, coordinators: EasyCareCoordinators,
+) -> None:
+    """Crée ou supprime un repair issue selon l'état du BPC (issue #10).
+
+    - BPC non standard (ex. BPC2/lr-ph) → issue d'avertissement « variante ».
+    - Voie pompe (index 0) absente en plus → issue « commandes désactivées »
+      (les entités de commande ne sont pas créées et les services sont refusés).
+    """
+    issue_id = f"{ISSUE_BPC_VARIANT}_{entry.entry_id}"
+    nonstandard = coordinators.is_bpc_nonstandard()
+    blocked = coordinators.is_bpc_commands_blocked()
+    if not nonstandard and not blocked:
+        ir.async_delete_issue(hass, DOMAIN, issue_id)
+        return
+    bpc = coordinators.modules.get_bpc()
+    ir.async_create_issue(
+        hass, DOMAIN, issue_id,
+        is_fixable=False,
+        severity=ir.IssueSeverity.WARNING,
+        translation_key="bpc_commands_blocked" if blocked else "bpc_unsupported_variant",
+        translation_placeholders={
+            "bpc_type": bpc.type if bpc is not None else "?",
+            "bpc_name": bpc.name if bpc is not None else "?",
+        },
+    )
+
+
+def _ensure_bpc_commands_enabled(coords: EasyCareCoordinators) -> None:
+    """Lève ServiceValidationError si les commandes BPC sont bloquées (issue #10)."""
+    if coords.is_bpc_commands_blocked():
+        raise ServiceValidationError(
+            translation_domain=DOMAIN,
+            translation_key="bpc_commands_blocked_service",
         )
 
 
@@ -210,7 +255,7 @@ def _async_register_services(hass: HomeAssistant) -> None:
         """Retourne le client et les coordinators de la première entrée active."""
         entries = hass.data.get(DOMAIN, {})
         if not entries:
-            raise vol.Invalid("Aucune intégration Easy-care active")
+            raise vol.Invalid("No active Easy-care integration")
         entry_id = next(iter(entries))
         coords: EasyCareCoordinators = entries[entry_id]
         client = coords.user._client  # noqa: SLF001
@@ -221,8 +266,9 @@ def _async_register_services(hass: HomeAssistant) -> None:
         watbox = coords.modules.get_watbox()
         bpc = coords.modules.get_bpc()
         if watbox is None or bpc is None:
-            _LOGGER.error("pump_on : WATBOX ou BPC introuvable")
+            _LOGGER.error("pump_on: WATBOX or BPC not found")
             return
+        _ensure_bpc_commands_enabled(coords)
         duration = call.data.get("duration_minutes", 60)
         await client.set_bpc_manual(watbox, bpc, index=0, action="on", duration_minutes=duration)
         await coords.bpc.async_request_immediate_refresh()
@@ -232,23 +278,27 @@ def _async_register_services(hass: HomeAssistant) -> None:
         watbox = coords.modules.get_watbox()
         bpc = coords.modules.get_bpc()
         if watbox is None or bpc is None:
-            _LOGGER.error("pump_off : WATBOX ou BPC introuvable")
+            _LOGGER.error("pump_off: WATBOX or BPC not found")
             return
+        _ensure_bpc_commands_enabled(coords)
         await client.set_bpc_manual(watbox, bpc, index=0, action="off")
         await coords.bpc.async_request_immediate_refresh()
 
     async def handle_set_filtration_mode(call: ServiceCall) -> None:
         client, coords = await _get_client_and_coords(call)
+        _ensure_bpc_commands_enabled(coords)
         await client.set_filtration_mode(call.data["mode"])
         await coords.bpc.async_request_immediate_refresh()
 
     async def handle_start_boost(call: ServiceCall) -> None:
         client, coords = await _get_client_and_coords(call)
+        _ensure_bpc_commands_enabled(coords)
         await client.start_boost(call.data["duration"])
         await coords.bpc.async_request_immediate_refresh()
 
     async def handle_cancel_boost(call: ServiceCall) -> None:
         client, coords = await _get_client_and_coords(call)
+        _ensure_bpc_commands_enabled(coords)
         await client.cancel_boost()
         await coords.bpc.async_request_immediate_refresh()
 
@@ -267,7 +317,7 @@ def _async_register_services(hass: HomeAssistant) -> None:
     hass.services.async_register(DOMAIN, SERVICE_START_BOOST, handle_start_boost, schema=SERVICE_START_BOOST_SCHEMA)
     hass.services.async_register(DOMAIN, SERVICE_CANCEL_BOOST, handle_cancel_boost)
     hass.services.async_register(DOMAIN, SERVICE_REFRESH_DATA, handle_refresh_data)
-    _LOGGER.debug("Services HA enregistrés")
+    _LOGGER.debug("HA services registered")
 
 
 def _async_unregister_services(hass: HomeAssistant) -> None:

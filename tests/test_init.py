@@ -1,0 +1,73 @@
+"""Tests du setup d'intégration : device info (type matériel) + repair issue BPC (issue #10)."""
+
+from __future__ import annotations
+
+from unittest.mock import AsyncMock
+
+from homeassistant.helpers import device_registry as dr, issue_registry as ir
+
+from custom_components.easycare_bywaterair.api.models import BPCInput, Module
+from custom_components.easycare_bywaterair.const import (
+    DEVICE_ID_BPC,
+    DEVICE_ID_WATBOX,
+    DOMAIN,
+)
+
+from tests.helpers import WATBOX_MODULE, setup_integration
+
+
+def _bpc2(n_inputs: int = 3) -> Module:
+    return Module(
+        type="lr-ph", name="BPC2-D36C1B", id="bpc2", serial_number="D36C1B",
+        number_of_inputs=n_inputs,
+    )
+
+
+# ---------------------------------------------------------------------------
+# hw_version = type matériel dans le device registry
+# ---------------------------------------------------------------------------
+
+async def test_device_hw_version_is_module_type(hass, mock_config_entry, mock_client):
+    entry = await setup_integration(hass, mock_config_entry, mock_client)
+    dev_reg = dr.async_get(hass)
+    bpc = dev_reg.async_get_device(identifiers={(DOMAIN, f"{entry.entry_id}_{DEVICE_ID_BPC}")})
+    watbox = dev_reg.async_get_device(identifiers={(DOMAIN, f"{entry.entry_id}_{DEVICE_ID_WATBOX}")})
+    assert bpc is not None and bpc.hw_version == "lr-pc"
+    assert watbox is not None and watbox.hw_version == "lr-bst-compact"
+
+
+async def test_device_hw_version_shows_bpc2_type(hass, mock_config_entry, mock_client):
+    mock_client.get_modules = AsyncMock(return_value=(WATBOX_MODULE, _bpc2()))
+    entry = await setup_integration(hass, mock_config_entry, mock_client)
+    dev_reg = dr.async_get(hass)
+    bpc = dev_reg.async_get_device(identifiers={(DOMAIN, f"{entry.entry_id}_{DEVICE_ID_BPC}")})
+    assert bpc is not None and bpc.hw_version == "lr-ph"
+
+
+# ---------------------------------------------------------------------------
+# Repair issue selon l'état du BPC
+# ---------------------------------------------------------------------------
+
+async def test_no_repair_issue_for_standard_bpc(hass, mock_config_entry, mock_client):
+    entry = await setup_integration(hass, mock_config_entry, mock_client)
+    issue = ir.async_get(hass).async_get_issue(DOMAIN, f"bpc_variant_{entry.entry_id}")
+    assert issue is None
+
+
+async def test_repair_issue_variant_for_bpc2(hass, mock_config_entry, mock_client):
+    # BPC2/lr-ph avec voie pompe présente → issue "variante" (commandes encore actives).
+    mock_client.get_modules = AsyncMock(return_value=(WATBOX_MODULE, _bpc2()))
+    entry = await setup_integration(hass, mock_config_entry, mock_client)
+    issue = ir.async_get(hass).async_get_issue(DOMAIN, f"bpc_variant_{entry.entry_id}")
+    assert issue is not None
+    assert issue.translation_key == "bpc_unsupported_variant"
+
+
+async def test_repair_issue_commands_blocked_when_pump_missing(hass, mock_config_entry, mock_client):
+    # BPC2/lr-ph SANS voie pompe (index 0) → issue "commandes désactivées".
+    mock_client.get_modules = AsyncMock(return_value=(WATBOX_MODULE, _bpc2()))
+    mock_client.get_bpc_status = AsyncMock(return_value=((BPCInput(index=1, value=0),), 27))
+    entry = await setup_integration(hass, mock_config_entry, mock_client)
+    issue = ir.async_get(hass).async_get_issue(DOMAIN, f"bpc_variant_{entry.entry_id}")
+    assert issue is not None
+    assert issue.translation_key == "bpc_commands_blocked"

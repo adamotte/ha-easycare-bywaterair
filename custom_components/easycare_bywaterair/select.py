@@ -45,6 +45,14 @@ async def async_setup_entry(
     coords: EasyCareCoordinators = hass.data[DOMAIN][entry.entry_id]
     if coords.modules.get_bpc() is None:
         return
+    # Garde-fou variantes matérielles (issue #10) : voie pompe (index 0) absente
+    # → agencement de voies non fiable, on ne crée pas les sélecteurs de commande.
+    if coords.is_bpc_commands_blocked():
+        _LOGGER.warning(
+            "BPC filtration/boost selectors disabled: pump channel (index 0) missing — "
+            "unverified channel layout (non-standard BPC variant). Read-only sensors remain."
+        )
+        return
     async_add_entities([
         EasyCareFiltrationModeSelect(coords.bpc, entry),
         EasyCareBoostSelect(coords.bpc, entry),
@@ -88,7 +96,7 @@ class EasyCareFiltrationModeSelect(
             confirmed = self._current_option_from_data()
             if confirmed == self._optimistic_option:
                 _LOGGER.debug(
-                    "Mode filtration : option optimiste '%s' confirmée par le coordinateur",
+                    "Filtration mode: optimistic option '%s' confirmed by coordinator",
                     self._optimistic_option,
                 )
                 self._optimistic_option = None
@@ -127,13 +135,13 @@ class EasyCareFiltrationModeSelect(
         """Change le mode de filtration."""
         api_option = HA_TO_API_FILTRATION_MODE.get(option)
         if api_option is None:
-            _LOGGER.error("Mode invalide demandé : %s", option)
+            _LOGGER.error("Invalid mode requested: %s", option)
             return
 
         coords: EasyCareCoordinators = self.hass.data[DOMAIN][self._entry.entry_id]
         client = coords.user._client  # noqa: SLF001
 
-        _LOGGER.info("Changement mode filtration → %s (%s)", option, api_option)
+        _LOGGER.info("Filtration mode change → %s (%s)", option, api_option)
         await client.set_filtration_mode_with_offset(api_option)
         # Mise à jour optimiste immédiate — pas de refresh immédiat,
         # le poll naturel (1 min en mode actif) confirmera le nouveau mode.
@@ -169,7 +177,7 @@ class EasyCareBoostSelect(EasyCareBPCEntity[EasyCareBPCCoordinator], SelectEntit
             confirmed = self._current_option_from_data()
             if confirmed == self._optimistic_option:
                 _LOGGER.debug(
-                    "Boost : option optimiste '%s' confirmée par le coordinateur",
+                    "Boost: optimistic option '%s' confirmed by coordinator",
                     self._optimistic_option,
                 )
                 self._optimistic_option = None
@@ -215,15 +223,15 @@ class EasyCareBoostSelect(EasyCareBPCEntity[EasyCareBPCCoordinator], SelectEntit
         client = coords.user._client  # noqa: SLF001
 
         if option in (HA_BOOST_OFF, HA_BOOST_ACTIVE):
-            _LOGGER.info("Annulation boost")
+            _LOGGER.info("Cancelling boost")
             await client.cancel_boost()
             self._optimistic_option = HA_BOOST_OFF
         else:
             api_boost = HA_TO_API_BOOST.get(option)
             if api_boost is None:
-                _LOGGER.error("Mode boost invalide : %s", option)
+                _LOGGER.error("Invalid boost mode: %s", option)
                 return
-            _LOGGER.info("Démarrage boost %s (%s)", option, api_boost)
+            _LOGGER.info("Starting boost %s (%s)", option, api_boost)
             await client.start_boost(api_boost)
             self._optimistic_option = HA_BOOST_ACTIVE
         # Pas de refresh immédiat — poll naturel (1 min) confirmera l'état.
