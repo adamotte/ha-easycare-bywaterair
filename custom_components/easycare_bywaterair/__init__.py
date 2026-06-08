@@ -233,6 +233,7 @@ def _async_manage_bpc_issue(
         translation_placeholders={
             "bpc_type": bpc.type if bpc is not None else "?",
             "bpc_name": bpc.name if bpc is not None else "?",
+            "issues_url": "https://github.com/adamotte/ha-easycare-bywaterair/issues",
         },
     )
 

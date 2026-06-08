@@ -244,11 +244,11 @@
   "issues": {
     "bpc_unsupported_variant": {
       "title": "Variante de BPC non totalement prise en charge",
-      "description": "Votre BPC renvoie un type matériel non reconnu (`{bpc_type}`, appareil « {bpc_name} »). Les capteurs fonctionnent normalement, mais les commandes pompe, boost, éclairage et mode de filtration peuvent être peu fiables sur cette variante, car l'agencement de ses voies n'est pas encore vérifié. Merci de signaler ce type sur le [suivi des tickets](https://github.com/adamotte/ha-easycare-bywaterair/issues) pour qu'une prise en charge complète soit ajoutée."
+      "description": "Votre BPC renvoie un type matériel non reconnu (`{bpc_type}`, appareil « {bpc_name} »). Les capteurs fonctionnent normalement, mais les commandes pompe, boost, éclairage et mode de filtration peuvent être peu fiables sur cette variante, car l'agencement de ses voies n'est pas encore vérifié. Merci de signaler ce type sur le [suivi des tickets]({issues_url}) pour qu'une prise en charge complète soit ajoutée."
     },
     "bpc_commands_blocked": {
       "title": "Commandes BPC désactivées (variante non prise en charge)",
-      "description": "Votre BPC (`{bpc_type}`, appareil « {bpc_name} ») n'expose pas la voie pompe attendue : l'agencement de ses voies est inconnu. Pour éviter d'envoyer des commandes erronées, les commandes pompe, boost, éclairage et mode de filtration ont été désactivées ; les capteurs en lecture seule restent disponibles. Merci de signaler ce cas sur le [suivi des tickets](https://github.com/adamotte/ha-easycare-bywaterair/issues) avec vos logs de debug."
+      "description": "Votre BPC (`{bpc_type}`, appareil « {bpc_name} ») n'expose pas la voie pompe attendue : l'agencement de ses voies est inconnu. Pour éviter d'envoyer des commandes erronées, les commandes pompe, boost, éclairage et mode de filtration ont été désactivées ; les capteurs en lecture seule restent disponibles. Merci de signaler ce cas sur le [suivi des tickets]({issues_url}) avec vos logs de debug."
     }
   },
   "exceptions": {
