@@ -65,14 +65,47 @@ MODULE_TYPE_BPC: Final = "lr-pc"
 MODULE_TYPE_AC1: Final = "lr-mas"
 MODULE_TYPE_PRESSURE: Final = "lr-pr"
 
+# Préfixe de type couvrant toute une famille matérielle (issue #10).
+# Le `type` exact varie selon le modèle ; ces préfixes sont vérifiés en plus du
+# type exact pour reconnaître les variantes (cluster confirmé via reverse de
+# l'app mobile v2.10.4 : lr-bst-* = gateways, lr-pc-* = BPC).
+MODULE_TYPE_PREFIX_WATBOX: Final = "lr-bst-"
+MODULE_TYPE_PREFIX_BPC: Final = "lr-pc-"
+
+# Types supplémentaires reconnus pour un rôle, au-delà du type exact et du préfixe
+# de famille (issue #10). `lr-ph` = type renvoyé par les modules nommés "BPC2-…"
+# (confirmé par un log utilisateur réel : "BPC2-D36C1B", type "lr-ph"). C'est un
+# contrôleur piscine Waterair distinct du BPC standard (classe DEX `LRPH` vs `LRPC`),
+# doté de fonctions pH (`PhManagementActivity`, `waterairPhPump`). On le résout comme
+# un BPC pour que le device soit reconnu.
+# ⚠️ RISQUE NON VÉRIFIÉ : le DEX a une phase d'install `fixNumberOfInputsOfBPC2` →
+# le BPC2 peut avoir un agencement d'entrées différent. Nos index codés en dur
+# (pompe=0, spot=1, escalight=2) ne sont PAS garantis pour le BPC2. À valider sur
+# les données réelles d'un BPC2 avant de garantir pompe/boost/lumières.
+MODULE_TYPE_ALIASES: Final[dict[str, tuple[str, ...]]] = {
+    MODULE_TYPE_BPC: ("lr-ph",),
+}
+
+# Types de modules attendus dans une piscine Waterair easy·care (codes API minuscules).
+# Périmètre VOLONTAIREMENT restreint au matériel piscine : ce set ne sert qu'à décider
+# quand émettre le warning "type inconnu". Tout module hors de cette liste (modules
+# Solem purement irrigation/jardin, ou matériel vraiment nouveau) doit déclencher le
+# warning — c'est le but diagnostic. Familles confirmées par reverse de l'app (v2.10.4).
+# NB : Pool Sense (lr-ps*) et Pool Box (lr-pb*) = produits Solem jardin, PAS Waterair.
 KNOWN_MODULE_TYPES: Final = frozenset({
-    MODULE_TYPE_WATBOX,
-    MODULE_TYPE_BPC,
-    MODULE_TYPE_AC1,
-    MODULE_TYPE_PRESSURE,
-    "lr-ag", "lr-can", "lr-fl", "lr-ip", "lr-is",
-    "lr-light", "lr-mb", "lr-mpc", "lr-ms", "lr-niv",
-    "lr-ol", "lr-pg",
+    # Gateways / WATBOX (préfixe lr-bst-)
+    MODULE_TYPE_WATBOX,  # lr-bst-compact
+    "lr-bst-4g", "lr-bst-autonomous", "lr-bst-outdoor",
+    "lr-bst-react", "lr-bst-react-4g",
+    # BPC — contrôleur pompe (préfixe lr-pc-)
+    MODULE_TYPE_BPC,  # lr-pc
+    "lr-pc-v2", "lr-pc-vs", "lr-pc-vs2",
+    # AC1 (analyseur), capteur de pression
+    MODULE_TYPE_AC1,       # lr-mas
+    MODULE_TYPE_PRESSURE,  # lr-pr
+    # BPC2 (BPC à régulation pH intégrée) — confirmé via log utilisateur réel
+    # (module "BPC2-…" de type "lr-ph"). Aussi alias BPC dans MODULE_TYPE_ALIASES.
+    "lr-ph",
 })
 
 BPC_INDEX_PUMP: Final = 0
