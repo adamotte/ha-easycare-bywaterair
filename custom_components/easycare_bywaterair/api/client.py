@@ -734,12 +734,10 @@ class EasyCareClient:
 
     @staticmethod
     def _validate_module_type(module: Module, expected: str, role: str) -> None:
-        """Vérifie qu'un module a le bon type.
-
-        Raises:
-            ValueError: si le module n'a pas le type attendu.
-        """
+        """Vérifie qu'un module a le bon type (warning si variante inconnue)."""
         if module.type != expected:
-            raise ValueError(
-                f"Module '{role}' a le type {module.type!r}, attendu {expected!r}"
+            _LOGGER.warning(
+                "Module '%s' a le type %r au lieu de %r — variante matérielle "
+                "non référencée, tentative quand même. Merci de signaler ce type dans une issue.",
+                role, module.type, expected,
             )
