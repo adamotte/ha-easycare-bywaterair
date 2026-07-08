@@ -568,15 +568,22 @@ class EasyCareBPCCoordinator(DataUpdateCoordinator[BPCData]):
             return self.data  # type: ignore[return-value]
 
         self._skipped_cycles = 0
-        watbox = self._modules.get_watbox()
         bpc = self._modules.get_bpc()
-        if watbox is None or bpc is None:
+        if bpc is None:
+            # Installation sans BPC (ex. WATBOX + AC1, issue #12) : rien à interroger.
+            # Aucune entité BPC n'est créée → dégradation silencieuse plutôt qu'échec du setup.
+            _LOGGER.debug("No BPC module present — BPC polling disabled (WATBOX/AC1-only setup)")
+            return None  # type: ignore[return-value]
+        watbox = self._modules.get_watbox()
+        if watbox is None:
+            # WATBOX absent alors qu'un BPC est présent : incohérent (le WATBOX est la
+            # gateway, toujours là) → on ne peut pas construire les URLs, vrai cas d'erreur.
             available = [(m.name, m.type) for m in (self._modules.data or ())]
             _LOGGER.warning(
-                "BPC or WATBOX not found — available modules (name, type): %s",
+                "WATBOX not found — available modules (name, type): %s",
                 available,
             )
-            raise UpdateFailed("BPC or WATBOX missing from the module list")
+            raise UpdateFailed("WATBOX missing from the module list")
 
         bpc_temp_reference: int | None = None
         try:
@@ -724,7 +731,9 @@ class EasyCareCoordinators:
         """
         await self.modules.async_config_entry_first_refresh()
         import asyncio
-        await asyncio.gather(
-            self.user.async_config_entry_first_refresh(),
-            self.bpc.async_config_entry_first_refresh(),
-        )
+        tasks = [self.user.async_config_entry_first_refresh()]
+        # Pas de BPC (ex. WATBOX + AC1, issue #12) → aucune entité BPC, pas d'abonné :
+        # inutile (et bruyant) de rafraîchir le coordinateur BPC au démarrage.
+        if self.modules.get_bpc() is not None:
+            tasks.append(self.bpc.async_config_entry_first_refresh())
+        await asyncio.gather(*tasks)

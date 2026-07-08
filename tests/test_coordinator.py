@@ -53,7 +53,6 @@ from tests.helpers import (
     FAKE_POOL_STATUS,
     FAKE_TREATMENT,
     FILTER_SCHEDULE_AUTO,
-    LRPR_MODULE,
     PUMP_INPUT_BOOSTING,
     PUMP_INPUT_OFF,
     PUMP_INPUT_ON,
@@ -500,14 +499,32 @@ class TestBPCCoordinatorUpdate:
     def _make_coord(self, hass, mock_config_entry, mock_client, modules):
         return EasyCareBPCCoordinator(hass, mock_client, modules, mock_config_entry)
 
-    async def test_missing_modules_raises_and_logs_available(
+    async def test_no_bpc_present_degrades_gracefully(
         self, hass, mock_config_entry, mock_client, caplog
     ):
+        """Installation sans BPC (WATBOX + AC1 seul, issue #12) : pas d'échec du setup."""
+        mock_config_entry.add_to_hass(hass)
+        mock_modules = MagicMock()
+        mock_modules.get_watbox.return_value = WATBOX_MODULE
+        mock_modules.get_bpc.return_value = None
+        mock_modules.data = (WATBOX_MODULE, AC1_MODULE)
+        coord = self._make_coord(hass, mock_config_entry, mock_client, mock_modules)
+        with caplog.at_level(logging.DEBUG):
+            result = await coord._async_update_data()
+        assert result is None
+        assert "No BPC module present" in caplog.text
+        # Aucun log d'avertissement/erreur : la dégradation est silencieuse.
+        assert not any(r.levelno >= logging.WARNING for r in caplog.records)
+
+    async def test_missing_watbox_raises_and_logs_available(
+        self, hass, mock_config_entry, mock_client, caplog
+    ):
+        """WATBOX absent alors qu'un BPC est présent : incohérent → vrai cas d'erreur."""
         mock_config_entry.add_to_hass(hass)
         mock_modules = MagicMock()
         mock_modules.get_watbox.return_value = None
-        mock_modules.get_bpc.return_value = None
-        mock_modules.data = (AC1_MODULE, LRPR_MODULE)
+        mock_modules.get_bpc.return_value = BPC_MODULE
+        mock_modules.data = (BPC_MODULE, AC1_MODULE)
         coord = self._make_coord(hass, mock_config_entry, mock_client, mock_modules)
         with caplog.at_level(logging.WARNING), pytest.raises(UpdateFailed):
             await coord._async_update_data()
