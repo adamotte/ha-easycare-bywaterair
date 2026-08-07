@@ -41,12 +41,21 @@
   "options": {
     "step": {
       "init": {
-        "title": "easy·care — Réglages de la pompe",
-        "description": "Configurez la puissance nominale de votre pompe de filtration pour le suivi de consommation. Mettez 0 pour désactiver.",
+        "title": "easy·care — Réglages",
+        "description": "Configurez le suivi de puissance de la pompe et le type d'équipement de la deuxième voie auxiliaire du BPC.",
         "data": {
+          "auxiliary_type": {
+            "label": "Type de la 2ᵉ voie",
+            "options": {
+              "escalight": "Éclairage des marches",
+              "electrolyzer": "Électrolyseur",
+              "none": "Désactivée"
+            }
+          },
           "pump_power_w": "Puissance de la pompe actuelle (W)"
         },
         "data_description": {
+          "auxiliary_type": "Les voies auxiliaires du BPC sont configurables dans l'app (projecteur, traitement, robot…). L'API n'exposant pas le type configuré, déclarez-le ici : « Éclairage des marches » conserve l'entité lumière actuelle, « Électrolyseur » la remplace par un interrupteur, « Désactivée » masque la voie.",
           "pump_power_w": "Puissance de votre pompe actuelle en watts (ex. 150 pour une P35). Mettez 0 pour désactiver les capteurs d'énergie."
         },
         "sections": {
@@ -91,6 +100,9 @@
       },
       "escalight_duration": {
         "name": "Durée éclairage marches"
+      },
+      "electrolyzer_duration": {
+        "name": "Durée électrolyseur"
       }
     },
     "select": {
@@ -116,6 +128,11 @@
           "boost_48h": "48 heures",
           "boost_72h": "72 heures"
         }
+      }
+    },
+    "switch": {
+      "electrolyzer": {
+        "name": "Électrolyseur"
       }
     },
     "sensor": {

@@ -1,12 +1,22 @@
 """Plateforme number pour Easy-care by Waterair.
 
-Expose les durées configurables des voies lumineuses BPC :
+Expose les durées configurables des voies BPC :
   - number.easycare_bywaterair_spot_duration       : durée du spot en heures
   - number.easycare_bywaterair_escalight_duration  : durée de l'escalight en heures
+  - number.easycare_bywaterair_electrolyzer_duration : durée de l'électrolyseur en heures
+
+Le comportement de ces entités est identique (plage 1–6 h, slider, persistance
+via RestoreEntity) — seuls le libellé et l'entity_id diffèrent. Une seule classe
+générique `EasyCareDurationNumber` est donc instanciée par voie.
+
+Création conditionnelle (issue #13) : spot_duration existe dès que le BPC a au
+moins 1 voie ; escalight_duration est créée si l'option `auxiliary_type` vaut
+« escalight » (défaut) ; electrolyzer_duration si elle vaut « electrolyzer »,
+et est lue par le switch électrolyseur.
 
 Ces valeurs sont purement locales (non envoyées au serveur) et lues par les
-entités light lors du `light.turn_on`. La persistance entre redémarrages HA
-est assurée par RestoreEntity. Plage : 1 à 6 heures, par pas de 1h (slider).
+entités light/switch lors du ON. La persistance entre redémarrages HA est
+assurée par RestoreEntity.
 """
 
 from __future__ import annotations
@@ -20,7 +30,14 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 
-from .const import DEFAULT_DURATION_LIGHT_HOURS, DOMAIN
+from .const import (
+    AUXILIARY_DEFAULT,
+    AUXILIARY_ELECTROLYZER,
+    AUXILIARY_ESCALIGHT,
+    CONF_AUXILIARY_TYPE,
+    DEFAULT_DURATION_LIGHT_HOURS,
+    DOMAIN,
+)
 from .coordinator import EasyCareCoordinators, EasyCareModulesCoordinator
 from .entity import EasyCareBPCEntity
 
@@ -43,9 +60,24 @@ async def async_setup_entry(
 
     n = bpc.number_of_inputs
     if n >= 1:
-        entities.append(EasyCareSpotDurationNumber(coordinators.modules, entry))
-    if n >= 2:
-        entities.append(EasyCareEscalightDurationNumber(coordinators.modules, entry))
+        entities.append(EasyCareDurationNumber(
+            coordinators.modules, entry,
+            translation_key="spot_duration",
+            unique_id_suffix="spot_duration",
+        ))
+    auxiliary_type = entry.options.get(CONF_AUXILIARY_TYPE, AUXILIARY_DEFAULT)
+    if n >= 2 and auxiliary_type == AUXILIARY_ESCALIGHT:
+        entities.append(EasyCareDurationNumber(
+            coordinators.modules, entry,
+            translation_key="escalight_duration",
+            unique_id_suffix="escalight_duration",
+        ))
+    if n >= 2 and auxiliary_type == AUXILIARY_ELECTROLYZER:
+        entities.append(EasyCareDurationNumber(
+            coordinators.modules, entry,
+            translation_key="electrolyzer_duration",
+            unique_id_suffix="electrolyzer_duration",
+        ))
 
     async_add_entities(entities)
 
@@ -99,19 +131,21 @@ class EasyCareDurationNumberBase(
         _LOGGER.debug("%s: new duration %.1fh", self.unique_id, value)
 
 
-class EasyCareSpotDurationNumber(EasyCareDurationNumberBase):
-    """Durée d'allumage par défaut du projecteur principal."""
+class EasyCareDurationNumber(EasyCareDurationNumberBase):
+    """Durée configurable d'une voie BPC.
 
-    _attr_translation_key = "spot_duration"
+    Classe générique : le comportement est identique quelle que soit la voie
+    (plage 1–6 h, persistance RestoreEntity) — seuls le libellé (translation_key)
+    et l'entity_id (unique_id_suffix) varient selon la voie : spot, escalight
+    ou électrolyseur (issue #13).
+    """
 
-    def __init__(self, coordinator: EasyCareModulesCoordinator, entry: ConfigEntry) -> None:
-        super().__init__(coordinator, entry, unique_id_suffix="spot_duration")
-
-
-class EasyCareEscalightDurationNumber(EasyCareDurationNumberBase):
-    """Durée d'allumage par défaut de l'éclairage des marches."""
-
-    _attr_translation_key = "escalight_duration"
-
-    def __init__(self, coordinator: EasyCareModulesCoordinator, entry: ConfigEntry) -> None:
-        super().__init__(coordinator, entry, unique_id_suffix="escalight_duration")
+    def __init__(
+        self,
+        coordinator: EasyCareModulesCoordinator,
+        entry: ConfigEntry,
+        translation_key: str,
+        unique_id_suffix: str,
+    ) -> None:
+        super().__init__(coordinator, entry, unique_id_suffix)
+        self._attr_translation_key = translation_key

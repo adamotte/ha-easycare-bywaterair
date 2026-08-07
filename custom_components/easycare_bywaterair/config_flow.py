@@ -19,7 +19,12 @@ from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.data_entry_flow import section
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.selector import DateSelector
+from homeassistant.helpers.selector import (
+    DateSelector,
+    SelectOptionDict,
+    SelectSelector,
+    SelectSelectorConfig,
+)
 
 from .api.auth import EasyCareAuth
 from .api.client import EasyCareClient
@@ -31,6 +36,9 @@ from .api.exceptions import (
     EasyCareTimeoutError,
 )
 from .const import (
+    AUXILIARY_DEFAULT,
+    AUXILIARY_OPTIONS,
+    CONF_AUXILIARY_TYPE,
     CONF_BEARER,
     CONF_BEARER_EXPIRES_AT,
     CONF_ID_TOKEN,
@@ -192,9 +200,17 @@ class EasyCareOptionsFlow(OptionsFlow):
         current_baseline = opts.get(CONF_PUMP_REPLACEMENT_RUNTIME_H, 0)
         current_prev_power = opts.get(CONF_PUMP_REPLACEMENT_PREVIOUS_POWER_W, 0)
         current_date = opts.get(CONF_PUMP_REPLACEMENT_DATE)
+        current_aux = opts.get(CONF_AUXILIARY_TYPE, AUXILIARY_DEFAULT)
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema({
+                vol.Optional(CONF_AUXILIARY_TYPE, default=current_aux): SelectSelector(
+                    SelectSelectorConfig(
+                        options=[
+                            SelectOptionDict(value=opt, label=opt) for opt in AUXILIARY_OPTIONS
+                        ],
+                    ),
+                ),
                 vol.Optional(CONF_PUMP_POWER_W, default=current_power): vol.All(
                     vol.Coerce(int), vol.Range(min=0, max=10000)
                 ),

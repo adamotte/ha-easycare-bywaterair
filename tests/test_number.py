@@ -40,12 +40,59 @@ async def test_number_escalight_duration_created(hass, mock_config_entry, mock_c
     assert entity_id is not None
 
 
+async def test_number_escalight_duration_not_created_when_electrolyzer_option(
+    hass, mock_config_entry, mock_client
+):
+    """La durée escalight n'est PAS créée quand la voie 2 est déclarée électrolyseur (issue #13)."""
+    from custom_components.easycare_bywaterair.const import (
+        AUXILIARY_ELECTROLYZER,
+        CONF_AUXILIARY_TYPE,
+    )
+    entry = await setup_integration(
+        hass, mock_config_entry, mock_client,
+        options={CONF_AUXILIARY_TYPE: AUXILIARY_ELECTROLYZER},
+    )
+    assert get_entity_id(hass, "number", entry.entry_id, "escalight_duration") is None
+    # La durée spot reste disponible.
+    assert get_entity_id(hass, "number", entry.entry_id, "spot_duration") is not None
+
+
 async def test_number_escalight_duration_range(hass, mock_config_entry, mock_client):
     """La plage escalight est bien 1–6h avec pas de 1."""
     entry = await setup_integration(hass, mock_config_entry, mock_client)
     entity_id = get_entity_id(hass, "number", entry.entry_id, "escalight_duration")
     state = hass.states.get(entity_id)
     assert state is not None
+    assert float(state.attributes["min"]) == 1.0
+    assert float(state.attributes["max"]) == 6.0
+    assert float(state.attributes["step"]) == 1.0
+
+
+async def test_number_electrolyzer_duration_not_created_by_default(
+    hass, mock_config_entry, mock_client
+):
+    """La durée électrolyseur n'est PAS créée par défaut (voie 2 = escalight)."""
+    entry = await setup_integration(hass, mock_config_entry, mock_client)
+    assert get_entity_id(hass, "number", entry.entry_id, "electrolyzer_duration") is None
+
+
+async def test_number_electrolyzer_duration_created_when_electrolyzer_option(
+    hass, mock_config_entry, mock_client
+):
+    """La durée électrolyseur est créée quand la voie 2 est déclarée électrolyseur (issue #13)."""
+    from custom_components.easycare_bywaterair.const import (
+        AUXILIARY_ELECTROLYZER,
+        CONF_AUXILIARY_TYPE,
+    )
+    entry = await setup_integration(
+        hass, mock_config_entry, mock_client,
+        options={CONF_AUXILIARY_TYPE: AUXILIARY_ELECTROLYZER},
+    )
+    entity_id = get_entity_id(hass, "number", entry.entry_id, "electrolyzer_duration")
+    assert entity_id is not None
+    state = hass.states.get(entity_id)
+    assert state is not None
+    # Même plage que les lumières (1–6h, pas 1).
     assert float(state.attributes["min"]) == 1.0
     assert float(state.attributes["max"]) == 6.0
     assert float(state.attributes["step"]) == 1.0
