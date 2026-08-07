@@ -192,16 +192,13 @@ class EasyCareElectrolyzerSwitch(EasyCareBPCEntity[EasyCareBPCCoordinator], Swit
         """Lit la durée configurée depuis l'entité number associée.
 
         Cherche dans les états HA l'entité number dont l'entity_id contient
-        le suffixe `electrolyzer_duration`. Retourne le défaut si l'entité est
-        introuvable ou sa valeur invalide.
+        le suffixe `electrolyzer_duration` (les entity_ids ne portent pas le
+        domaine de l'intégration, on ne peut donc pas filtrer dessus).
+        Retourne le défaut si l'entité est introuvable ou sa valeur invalide.
         """
         suffix = "electrolyzer_duration"
         for state in self.hass.states.async_all("number"):
-            if (
-                state.entity_id.startswith("number.")
-                and suffix in state.entity_id
-                and DOMAIN in state.entity_id
-            ):
+            if state.entity_id.startswith("number.") and suffix in state.entity_id:
                 try:
                     return float(state.state)
                 except (ValueError, TypeError):

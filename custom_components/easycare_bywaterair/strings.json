@@ -38,20 +38,22 @@
       "reauth_successful": "Re-authentication successful."
     }
   },
+  "selector": {
+    "auxiliary_type": {
+      "options": {
+        "escalight": "Step lighting",
+        "electrolyzer": "Electrolyzer",
+        "none": "Disabled"
+      }
+    }
+  },
   "options": {
     "step": {
       "init": {
         "title": "easy·care — Settings",
         "description": "Configure the pump power monitoring and the equipment type of the second BPC auxiliary channel.",
         "data": {
-          "auxiliary_type": {
-            "label": "Second channel type",
-            "options": {
-              "escalight": "Step lighting",
-              "electrolyzer": "Electrolyzer",
-              "none": "Disabled"
-            }
-          },
+          "auxiliary_type": "Second channel type",
           "pump_power_w": "Current pump power (W)"
         },
         "data_description": {

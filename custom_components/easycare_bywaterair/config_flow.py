@@ -209,6 +209,7 @@ class EasyCareOptionsFlow(OptionsFlow):
                         options=[
                             SelectOptionDict(value=opt, label=opt) for opt in AUXILIARY_OPTIONS
                         ],
+                        translation_key=CONF_AUXILIARY_TYPE,
                     ),
                 ),
                 vol.Optional(CONF_PUMP_POWER_W, default=current_power): vol.All(

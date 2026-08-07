@@ -38,20 +38,22 @@
       "reauth_successful": "Ré-authentification réussie."
     }
   },
+  "selector": {
+    "auxiliary_type": {
+      "options": {
+        "escalight": "Éclairage des marches",
+        "electrolyzer": "Électrolyseur",
+        "none": "Désactivée"
+      }
+    }
+  },
   "options": {
     "step": {
       "init": {
         "title": "easy·care — Réglages",
         "description": "Configurez le suivi de puissance de la pompe et le type d'équipement de la deuxième voie auxiliaire du BPC.",
         "data": {
-          "auxiliary_type": {
-            "label": "Type de la 2ᵉ voie",
-            "options": {
-              "escalight": "Éclairage des marches",
-              "electrolyzer": "Électrolyseur",
-              "none": "Désactivée"
-            }
-          },
+          "auxiliary_type": "Type de la 2ᵉ voie",
           "pump_power_w": "Puissance de la pompe actuelle (W)"
         },
         "data_description": {

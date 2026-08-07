@@ -215,11 +215,7 @@ class EasyCareBPCLight(EasyCareBPCEntity[EasyCareBPCCoordinator], LightEntity):
         """
         suffix = "spot_duration" if self._bpc_index == BPC_INDEX_SPOT else "escalight_duration"
         for state in self.hass.states.async_all("number"):
-            if (
-                state.entity_id.startswith("number.")
-                and suffix in state.entity_id
-                and DOMAIN in state.entity_id
-            ):
+            if state.entity_id.startswith("number.") and suffix in state.entity_id:
                 try:
                     return float(state.state)
                 except (ValueError, TypeError):
