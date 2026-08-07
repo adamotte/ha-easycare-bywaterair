@@ -56,15 +56,7 @@ Home Assistant integration for pools equipped with the
 
 ## 📦 Installation
 
-### Via HACS (recommended)
-1. In HACS → Integrations → menu (⋮) → Custom repositories
-2. Add this repository URL as type "Integration"
-3. Install "easy·care by Waterair"
-4. Restart Home Assistant
-
-### Manual
-Copy the `custom_components/easycare_bywaterair` folder into the `custom_components`
-directory of your HA installation, then restart.
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=adamotte&repository=ha-easycare-bywaterair&category=integration)
 
 ## 🔧 Configuration
 
