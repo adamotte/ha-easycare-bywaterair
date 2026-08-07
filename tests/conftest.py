@@ -38,7 +38,22 @@ from tests.helpers import get_entity_id, setup_integration  # noqa: F401  (re-ex
 def pytest_configure(config):
     """Sur Windows, forcer SelectorEventLoop avant le plugin HA."""
     if sys.platform == "win32":
+        # Le plugin pytest-homeassistant-custom-component neutralise
+        # asyncio.set_event_loop_policy à l'import (remplacé par un no-op).
+        # On restaure la vraie fonction puis on force la policy Selector :
+        # la policy par défaut (Proactor) est incompatible avec aiohttp.
+        asyncio.set_event_loop_policy = asyncio.events.set_event_loop_policy
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+        # Le hook du plugin HA appelle pytest_socket.disable_socket, qui bloque
+        # socket.socketpair() en AF_INET — c'est le mécanisme interne du loop
+        # Selector sous Windows. Les tests HA mockent tous les appels réseau
+        # (aiohttp_mocker) : on neutralise donc le blocage sur Windows.
+        try:
+            import pytest_socket  # type: ignore[import-not-found]
+        except ImportError:
+            pass
+        else:
+            pytest_socket.disable_socket = lambda *args, **kwargs: None
 
 
 @pytest.fixture(scope="session")

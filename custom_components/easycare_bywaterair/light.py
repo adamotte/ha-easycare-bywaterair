@@ -4,6 +4,10 @@ Expose les voies lumineuses du BPC :
   - light.easycare_bywaterair_spot      → projecteur principal (voie BPC index 1)
   - light.easycare_bywaterair_escalight → éclairage des marches (voie BPC index 2)
 
+L'escalight n'est créé que si l'option `auxiliary_type` vaut « escalight »
+(valeur par défaut). La voie 2 étant un auxiliaire configurable dans l'app, son
+type réel (éclairage, électrolyseur…) est déclaré par l'utilisateur (issue #13).
+
 Les lumières ne supportent que ON/OFF. La durée par défaut est lue depuis
 l'entité number associée (number.py).
 """
@@ -19,8 +23,11 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
+    AUXILIARY_DEFAULT,
+    AUXILIARY_ESCALIGHT,
     BPC_INDEX_ESCALIGHT,
     BPC_INDEX_SPOT,
+    CONF_AUXILIARY_TYPE,
     DEFAULT_DURATION_LIGHT_HOURS,
     DOMAIN,
 )
@@ -38,7 +45,10 @@ async def async_setup_entry(
     """Configure les lumières BPC depuis un ConfigEntry.
 
     Le spot est créé si le BPC a au moins 1 voie lumineuse (index 1).
-    L'escalight est créé si le BPC a au moins 2 voies lumineuses (index 2).
+    L'escalight est créé si le BPC a au moins 2 voies lumineuses (index 2) ET
+    que l'option `auxiliary_type` est sur « escalight » (défaut). Si la voie 2
+    est déclarée électrolyseur (ou désactivée), aucune lumière n'est créée pour
+    elle — voir switch.py.
     """
     coordinators: EasyCareCoordinators = hass.data[DOMAIN][entry.entry_id]
     bpc = coordinators.modules.get_bpc()
@@ -64,11 +74,15 @@ async def async_setup_entry(
     n = bpc.number_of_inputs
     if n >= 1:
         entities.append(EasyCareSpotLight(coordinators.bpc, entry))
-    if n >= 2:
+    auxiliary_type = entry.options.get(CONF_AUXILIARY_TYPE, AUXILIARY_DEFAULT)
+    if n >= 2 and auxiliary_type == AUXILIARY_ESCALIGHT:
         entities.append(EasyCareEscalightLight(coordinators.bpc, entry))
 
     if entities:
-        _LOGGER.debug("Creating %d BPC light(s) (numberOfInputs=%d)", len(entities), n)
+        _LOGGER.debug(
+            "Creating %d BPC light(s) (numberOfInputs=%d, auxiliary_type=%s)",
+            len(entities), n, auxiliary_type,
+        )
 
     async_add_entities(entities)
 
@@ -201,11 +215,7 @@ class EasyCareBPCLight(EasyCareBPCEntity[EasyCareBPCCoordinator], LightEntity):
         """
         suffix = "spot_duration" if self._bpc_index == BPC_INDEX_SPOT else "escalight_duration"
         for state in self.hass.states.async_all("number"):
-            if (
-                state.entity_id.startswith("number.")
-                and suffix in state.entity_id
-                and DOMAIN in state.entity_id
-            ):
+            if state.entity_id.startswith("number.") and suffix in state.entity_id:
                 try:
                     return float(state.state)
                 except (ValueError, TypeError):

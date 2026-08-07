@@ -38,15 +38,26 @@
       "reauth_successful": "Re-authentication successful."
     }
   },
+  "selector": {
+    "auxiliary_type": {
+      "options": {
+        "escalight": "Step lighting",
+        "electrolyzer": "Electrolyzer",
+        "none": "Disabled"
+      }
+    }
+  },
   "options": {
     "step": {
       "init": {
-        "title": "easy·care — Pump settings",
-        "description": "Configure the rated power of your filtration pump for energy monitoring. Set to 0 to disable.",
+        "title": "easy·care — Settings",
+        "description": "Configure the pump power monitoring and the equipment type of the second BPC auxiliary channel.",
         "data": {
+          "auxiliary_type": "Second channel type",
           "pump_power_w": "Current pump power (W)"
         },
         "data_description": {
+          "auxiliary_type": "The BPC auxiliary channels are configurable in the app (lighting, treatment, robot…). Since the API does not expose the configured type, declare it here: \"Step lighting\" keeps the existing light entity, \"Electrolyzer\" replaces it with a switch, \"Disabled\" hides the channel.",
           "pump_power_w": "Power of your current pump in watts (e.g. 150 for a P35). Set to 0 to disable energy sensors."
         },
         "sections": {
@@ -91,6 +102,9 @@
       },
       "escalight_duration": {
         "name": "Step lighting duration"
+      },
+      "electrolyzer_duration": {
+        "name": "Electrolyzer duration"
       }
     },
     "select": {
@@ -116,6 +130,11 @@
           "boost_48h": "48 hours",
           "boost_72h": "72 hours"
         }
+      }
+    },
+    "switch": {
+      "electrolyzer": {
+        "name": "Electrolyzer"
       }
     },
     "sensor": {

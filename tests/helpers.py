@@ -229,17 +229,22 @@ def make_mock_config_entry():
     )
 
 
-async def setup_integration(hass, mock_config_entry, mock_client):
+async def setup_integration(hass, mock_config_entry, mock_client, options=None):
     """Configure l'intégration dans hass avec un client mocké.
 
     Utilise async_setup_component pour que HA enregistre d'abord le domaine,
     puis forward_entry_setups pour que toutes les plateformes soient chargées.
+
+    `options` (dict optionnel) permet de régler les options du ConfigEntry via
+    async_update_entry avant le chargement des plateformes.
     """
     from unittest.mock import patch
 
     from homeassistant.setup import async_setup_component
 
     mock_config_entry.add_to_hass(hass)
+    if options is not None:
+        hass.config_entries.async_update_entry(mock_config_entry, options=options)
     mock_auth = MagicMock()
     mock_auth.bearer = FAKE_BEARER
 

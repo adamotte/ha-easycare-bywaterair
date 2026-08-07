@@ -20,6 +20,8 @@ CONF_PUMP_POWER_W: Final = "pump_power_w"
 CONF_PUMP_REPLACEMENT_RUNTIME_H: Final = "pump_replacement_runtime_h"
 CONF_PUMP_REPLACEMENT_DATE: Final = "pump_replacement_date"
 CONF_PUMP_REPLACEMENT_PREVIOUS_POWER_W: Final = "pump_replacement_previous_power_w"
+# Type d'équipement de la voie auxiliaire 2 du BPC (option de configuration).
+CONF_AUXILIARY_TYPE: Final = "auxiliary_type"
 
 API_HOST_EASYCARE: Final = "https://easycare.waterair.com"
 API_PATH_TOKEN_FROM_B2C: Final = "/oauth2/tokenFromAzureADB2CIdToken"
@@ -111,6 +113,17 @@ KNOWN_MODULE_TYPES: Final = frozenset({
 BPC_INDEX_PUMP: Final = 0
 BPC_INDEX_SPOT: Final = 1
 BPC_INDEX_ESCALIGHT: Final = 2
+
+# Type de la voie auxiliaire BPC index 2 (issue #13). L'API ne permet pas de
+# déduire de façon fiable ce que l'utilisateur a configuré dans l'app (projecteur,
+# traitement, robot, PAC, autre…). L'option `CONF_AUXILIARY_TYPE` laisse l'utilisateur
+# déclarer le type : « escalight » (éclairage de marches, comportement par défaut),
+# « electrolyzer » (électrolyseur / traitement) ou « none » (aucune entité sur la voie).
+AUXILIARY_ESCALIGHT: Final = "escalight"
+AUXILIARY_ELECTROLYZER: Final = "electrolyzer"
+AUXILIARY_NONE: Final = "none"
+AUXILIARY_OPTIONS: Final = (AUXILIARY_ESCALIGHT, AUXILIARY_ELECTROLYZER, AUXILIARY_NONE)
+AUXILIARY_DEFAULT: Final = AUXILIARY_ESCALIGHT
 
 BPC_ACTION_OFF: Final = 1
 BPC_ACTION_ON: Final = 2

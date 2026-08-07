@@ -108,6 +108,23 @@ async def test_light_escalight_created_when_2_inputs(hass, mock_config_entry, mo
     assert entity_id is not None
 
 
+async def test_light_escalight_not_created_when_electrolyzer_option(
+    hass, mock_config_entry, mock_client
+):
+    """Escalight n'est PAS créé quand la voie 2 est déclarée électrolyseur (issue #13)."""
+    from custom_components.easycare_bywaterair.const import (
+        AUXILIARY_ELECTROLYZER,
+        CONF_AUXILIARY_TYPE,
+    )
+    entry = await setup_integration(
+        hass, mock_config_entry, mock_client,
+        options={CONF_AUXILIARY_TYPE: AUXILIARY_ELECTROLYZER},
+    )
+    assert get_entity_id(hass, "light", entry.entry_id, "escalight") is None
+    # Le spot reste créé, indépendant de l'option.
+    assert get_entity_id(hass, "light", entry.entry_id, "spot") is not None
+
+
 async def test_light_not_created_when_bpc_commands_blocked(hass, mock_config_entry, mock_client):
     """Aucune lumière créée si la voie pompe (index 0) est absente (BPC2/lr-ph — issue #10)."""
     from custom_components.easycare_bywaterair.api.models import Module

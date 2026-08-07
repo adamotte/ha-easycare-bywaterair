@@ -229,3 +229,37 @@ class TestOptionsFlow:
         )
         assert result["type"] == "create_entry"
         assert result["data"]["pump_power_w"] == 1500
+
+    async def test_options_flow_saves_auxiliary_type(self, hass, mock_config_entry):
+        mock_config_entry.add_to_hass(hass)
+        result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={
+                "auxiliary_type": "electrolyzer",
+                "pump_power_w": 0,
+                "pump_replacement": {
+                    "pump_replacement_runtime_h": 0,
+                    "pump_replacement_previous_power_w": 0,
+                },
+            },
+        )
+        assert result["type"] == "create_entry"
+        assert result["data"]["auxiliary_type"] == "electrolyzer"
+
+    async def test_options_flow_defaults_auxiliary_type(self, hass, mock_config_entry):
+        """Sans saisie, l'option du type de voie garde le défaut « escalight »."""
+        mock_config_entry.add_to_hass(hass)
+        result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            user_input={
+                "pump_power_w": 0,
+                "pump_replacement": {
+                    "pump_replacement_runtime_h": 0,
+                    "pump_replacement_previous_power_w": 0,
+                },
+            },
+        )
+        assert result["type"] == "create_entry"
+        assert result["data"].get("auxiliary_type") == "escalight"
