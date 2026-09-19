@@ -9,18 +9,35 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo, async_get
 from homeassistant.helpers.update_coordinator import CoordinatorEntity, DataUpdateCoordinator
 
+from .compat import HAS_ASYNC_GET_DEVICE_BY_IDENTIFIER, SUPPORTS_VIA_DEVICE_ID
 from .const import DEVICE_ID_AC1, DEVICE_ID_BPC, DEVICE_ID_PRESSURE, DEVICE_ID_WATBOX, DOMAIN, MANUFACTURER
 
 _CoordinatorT = TypeVar("_CoordinatorT", bound=DataUpdateCoordinator)
 
 
+def _watbox_identifier(entry: ConfigEntry) -> tuple[str, str]:
+    """Identifiant composite du device passerelle WATBOX."""
+    return (DOMAIN, f"{entry.entry_id}_{DEVICE_ID_WATBOX}")
+
+
 def _watbox_device_id(hass: HomeAssistant, entry: ConfigEntry) -> str | None:
     """Résout l'identifiant du device passerelle WATBOX dans le registry."""
     device_registry = async_get(hass)
-    watbox = device_registry.async_get_device_by_identifier(
-        (DOMAIN, f"{entry.entry_id}_{DEVICE_ID_WATBOX}"), entry.entry_id
-    )
+    identifier = _watbox_identifier(entry)
+    if HAS_ASYNC_GET_DEVICE_BY_IDENTIFIER:
+        watbox = device_registry.async_get_device_by_identifier(identifier, entry.entry_id)
+    else:
+        watbox = device_registry.async_get_device(identifiers={identifier})
     return watbox.id if watbox is not None else None
+
+
+def _link_to_watbox(info: DeviceInfo, hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Rattache un device à la passerelle WATBOX selon les capacités HA."""
+    if SUPPORTS_VIA_DEVICE_ID:
+        if (via_id := _watbox_device_id(hass, entry)) is not None:
+            info["via_device_id"] = via_id
+    else:
+        info["via_device"] = _watbox_identifier(entry)
 
 
 class EasyCareEntity(CoordinatorEntity[_CoordinatorT], Generic[_CoordinatorT]):
@@ -57,8 +74,7 @@ class EasyCareBPCEntity(EasyCareEntity[_CoordinatorT], Generic[_CoordinatorT]):
             identifiers={(DOMAIN, f"{self._entry.entry_id}_{DEVICE_ID_BPC}")},
             manufacturer=MANUFACTURER, model="BPC (Boîtier Piscine Connecté)",
         )
-        if (via_id := _watbox_device_id(self.hass, self._entry)) is not None:
-            info["via_device_id"] = via_id
+        _link_to_watbox(info, self.hass, self._entry)
         return info
 
 
@@ -74,8 +90,7 @@ class EasyCareAC1Entity(EasyCareEntity[_CoordinatorT], Generic[_CoordinatorT]):
             identifiers={(DOMAIN, f"{self._entry.entry_id}_{DEVICE_ID_AC1}")},
             manufacturer=MANUFACTURER, model="AC1 (Analyseur Connecté)",
         )
-        if (via_id := _watbox_device_id(self.hass, self._entry)) is not None:
-            info["via_device_id"] = via_id
+        _link_to_watbox(info, self.hass, self._entry)
         return info
 
 
@@ -91,6 +106,5 @@ class EasyCarePressureEntity(EasyCareEntity[_CoordinatorT], Generic[_Coordinator
             identifiers={(DOMAIN, f"{self._entry.entry_id}_{DEVICE_ID_PRESSURE}")},
             manufacturer=MANUFACTURER, model="LR-PR (Capteur Pression)",
         )
-        if (via_id := _watbox_device_id(self.hass, self._entry)) is not None:
-            info["via_device_id"] = via_id
+        _link_to_watbox(info, self.hass, self._entry)
         return info
