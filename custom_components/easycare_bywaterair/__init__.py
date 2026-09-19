@@ -166,8 +166,9 @@ async def _async_register_devices(
     device_registry = dr.async_get(hass)
 
     watbox = coordinators.modules.get_watbox()
+    watbox_device = None
     if watbox is not None:
-        device_registry.async_get_or_create(
+        watbox_device = device_registry.async_get_or_create(
             config_entry_id=entry.entry_id,
             identifiers={(DOMAIN, f"{entry.entry_id}_{DEVICE_ID_WATBOX}")},
             manufacturer=MANUFACTURER, model="WATBOX",
@@ -183,7 +184,7 @@ async def _async_register_devices(
             manufacturer=MANUFACTURER, model="BPC (Boîtier Piscine Connecté)",
             name=bpc.name, serial_number=bpc.serial_number,
             hw_version=bpc.type,
-            via_device=(DOMAIN, f"{entry.entry_id}_{DEVICE_ID_WATBOX}"),
+            via_device_id=watbox_device.id if watbox_device is not None else None,
         )
 
     ac1_modules = coordinators.modules.get_modules_by_type(MODULE_TYPE_AC1)
@@ -195,7 +196,7 @@ async def _async_register_devices(
             manufacturer=MANUFACTURER, model="AC1 (Analyseur Connecté)",
             name=ac1.name, serial_number=ac1.serial_number,
             hw_version=ac1.type,
-            via_device=(DOMAIN, f"{entry.entry_id}_{DEVICE_ID_WATBOX}"),
+            via_device_id=watbox_device.id if watbox_device is not None else None,
         )
 
     pressure_modules = coordinators.modules.get_modules_by_type(MODULE_TYPE_PRESSURE)
@@ -207,7 +208,7 @@ async def _async_register_devices(
             manufacturer=MANUFACTURER, model="LR-PR (Capteur Pression)",
             name=lrpr.name, serial_number=lrpr.serial_number,
             hw_version=lrpr.type,
-            via_device=(DOMAIN, f"{entry.entry_id}_{DEVICE_ID_WATBOX}"),
+            via_device_id=watbox_device.id if watbox_device is not None else None,
         )
 
 

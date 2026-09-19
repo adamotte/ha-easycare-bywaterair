@@ -5,12 +5,22 @@ from __future__ import annotations
 from typing import Generic, TypeVar
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceInfo, async_get
 from homeassistant.helpers.update_coordinator import CoordinatorEntity, DataUpdateCoordinator
 
 from .const import DEVICE_ID_AC1, DEVICE_ID_BPC, DEVICE_ID_PRESSURE, DEVICE_ID_WATBOX, DOMAIN, MANUFACTURER
 
 _CoordinatorT = TypeVar("_CoordinatorT", bound=DataUpdateCoordinator)
+
+
+def _watbox_device_id(hass: HomeAssistant, entry: ConfigEntry) -> str | None:
+    """Résout l'identifiant du device passerelle WATBOX dans le registry."""
+    device_registry = async_get(hass)
+    watbox = device_registry.async_get_device_by_identifier(
+        (DOMAIN, f"{entry.entry_id}_{DEVICE_ID_WATBOX}"), entry.entry_id
+    )
+    return watbox.id if watbox is not None else None
 
 
 class EasyCareEntity(CoordinatorEntity[_CoordinatorT], Generic[_CoordinatorT]):
@@ -40,11 +50,16 @@ class EasyCareBPCEntity(EasyCareEntity[_CoordinatorT], Generic[_CoordinatorT]):
 
     def __init__(self, coordinator: _CoordinatorT, entry: ConfigEntry, unique_id_suffix: str) -> None:
         super().__init__(coordinator, entry, unique_id_suffix)
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, f"{entry.entry_id}_{DEVICE_ID_BPC}")},
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        info = DeviceInfo(
+            identifiers={(DOMAIN, f"{self._entry.entry_id}_{DEVICE_ID_BPC}")},
             manufacturer=MANUFACTURER, model="BPC (Boîtier Piscine Connecté)",
-            via_device=(DOMAIN, f"{entry.entry_id}_{DEVICE_ID_WATBOX}"),
         )
+        if (via_id := _watbox_device_id(self.hass, self._entry)) is not None:
+            info["via_device_id"] = via_id
+        return info
 
 
 class EasyCareAC1Entity(EasyCareEntity[_CoordinatorT], Generic[_CoordinatorT]):
@@ -52,11 +67,16 @@ class EasyCareAC1Entity(EasyCareEntity[_CoordinatorT], Generic[_CoordinatorT]):
 
     def __init__(self, coordinator: _CoordinatorT, entry: ConfigEntry, unique_id_suffix: str) -> None:
         super().__init__(coordinator, entry, unique_id_suffix)
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, f"{entry.entry_id}_{DEVICE_ID_AC1}")},
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        info = DeviceInfo(
+            identifiers={(DOMAIN, f"{self._entry.entry_id}_{DEVICE_ID_AC1}")},
             manufacturer=MANUFACTURER, model="AC1 (Analyseur Connecté)",
-            via_device=(DOMAIN, f"{entry.entry_id}_{DEVICE_ID_WATBOX}"),
         )
+        if (via_id := _watbox_device_id(self.hass, self._entry)) is not None:
+            info["via_device_id"] = via_id
+        return info
 
 
 class EasyCarePressureEntity(EasyCareEntity[_CoordinatorT], Generic[_CoordinatorT]):
@@ -64,8 +84,13 @@ class EasyCarePressureEntity(EasyCareEntity[_CoordinatorT], Generic[_Coordinator
 
     def __init__(self, coordinator: _CoordinatorT, entry: ConfigEntry, unique_id_suffix: str) -> None:
         super().__init__(coordinator, entry, unique_id_suffix)
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, f"{entry.entry_id}_{DEVICE_ID_PRESSURE}")},
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        info = DeviceInfo(
+            identifiers={(DOMAIN, f"{self._entry.entry_id}_{DEVICE_ID_PRESSURE}")},
             manufacturer=MANUFACTURER, model="LR-PR (Capteur Pression)",
-            via_device=(DOMAIN, f"{entry.entry_id}_{DEVICE_ID_WATBOX}"),
         )
+        if (via_id := _watbox_device_id(self.hass, self._entry)) is not None:
+            info["via_device_id"] = via_id
+        return info
