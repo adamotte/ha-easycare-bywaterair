@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="custom_components/easycare_bywaterair/brand/icon.png" alt="easy·care by Waterair" width="128" height="128">
+</p>
+
 # easy·care by Waterair — Home Assistant Integration
 
 [![Release](https://img.shields.io/github/v/release/adamotte/ha-easycare-bywaterair?style=flat-square)](https://github.com/adamotte/ha-easycare-bywaterair/releases)
