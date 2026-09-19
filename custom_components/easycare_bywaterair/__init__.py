@@ -11,13 +11,16 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import ConfigEntryNotReady, ServiceValidationError
-from homeassistant.helpers import device_registry as dr, issue_registry as ir
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.device_registry import DeviceEntry
 
 from .api.auth import EasyCareAuth
 from .api.client import EasyCareClient
 from .api.exceptions import EasyCareError, EasyCareTokenExpiredError
 from .api.models import BearerToken, OAuthTokens
+from .compat import SUPPORTS_VIA_DEVICE_ID
 from .const import (
     BOOST_MODES,
     CONF_BEARER,
@@ -159,6 +162,15 @@ async def _async_entry_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
     await hass.config_entries.async_reload(entry.entry_id)
 
 
+def _via_relation_args(entry: ConfigEntry, watbox_device: DeviceEntry | None) -> dict[str, object]:
+    """Kwargs `via_*` pour `async_get_or_create` selon les capacités HA."""
+    if SUPPORTS_VIA_DEVICE_ID:
+        if watbox_device is not None:
+            return {"via_device_id": watbox_device.id}
+        return {}
+    return {"via_device": (DOMAIN, f"{entry.entry_id}_{DEVICE_ID_WATBOX}")}
+
+
 async def _async_register_devices(
     hass: HomeAssistant, entry: ConfigEntry, coordinators: EasyCareCoordinators,
 ) -> None:
@@ -176,6 +188,8 @@ async def _async_register_devices(
             hw_version=watbox.type,
         )
 
+    via_relation = _via_relation_args(entry, watbox_device)
+
     bpc = coordinators.modules.get_bpc()
     if bpc is not None:
         device_registry.async_get_or_create(
@@ -184,7 +198,7 @@ async def _async_register_devices(
             manufacturer=MANUFACTURER, model="BPC (Boîtier Piscine Connecté)",
             name=bpc.name, serial_number=bpc.serial_number,
             hw_version=bpc.type,
-            via_device_id=watbox_device.id if watbox_device is not None else None,
+            **via_relation,
         )
 
     ac1_modules = coordinators.modules.get_modules_by_type(MODULE_TYPE_AC1)
@@ -196,7 +210,7 @@ async def _async_register_devices(
             manufacturer=MANUFACTURER, model="AC1 (Analyseur Connecté)",
             name=ac1.name, serial_number=ac1.serial_number,
             hw_version=ac1.type,
-            via_device_id=watbox_device.id if watbox_device is not None else None,
+            **via_relation,
         )
 
     pressure_modules = coordinators.modules.get_modules_by_type(MODULE_TYPE_PRESSURE)
@@ -208,7 +222,7 @@ async def _async_register_devices(
             manufacturer=MANUFACTURER, model="LR-PR (Capteur Pression)",
             name=lrpr.name, serial_number=lrpr.serial_number,
             hw_version=lrpr.type,
-            via_device_id=watbox_device.id if watbox_device is not None else None,
+            **via_relation,
         )
 
 
