@@ -84,8 +84,10 @@ SERVICE_START_BOOST_SCHEMA = vol.Schema({
 # Identifiant de base du repair issue "BPC non standard" (issue #10).
 ISSUE_BPC_VARIANT: Final = "bpc_variant"
 
+type EasyCareConfigEntry = ConfigEntry[EasyCareCoordinators]
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+
+async def async_setup_entry(hass: HomeAssistant, entry: EasyCareConfigEntry) -> bool:
     """Initialise une intégration Easy-care depuis un ConfigEntry."""
     _LOGGER.debug("Setup entry %s", entry.entry_id)
 
@@ -132,8 +134,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     _async_manage_bpc_issue(hass, entry, coordinators)
     _async_log_bpc_diagnostics(coordinators)
 
-    hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN][entry.entry_id] = coordinators
+    entry.runtime_data = coordinators
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     _async_register_services(hass)
@@ -146,18 +147,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_unload_entry(hass: HomeAssistant, entry: EasyCareConfigEntry) -> bool:
     """Décharge une intégration Easy-care."""
     _LOGGER.debug("Unload entry %s", entry.entry_id)
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    if unload_ok:
-        hass.data[DOMAIN].pop(entry.entry_id, None)
-        if not hass.data.get(DOMAIN):
+    if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
+        if not hass.config_entries.async_loaded_entries(DOMAIN):
             _async_unregister_services(hass)
     return unload_ok
 
 
-async def _async_entry_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
+async def _async_entry_updated(hass: HomeAssistant, entry: EasyCareConfigEntry) -> None:
     """Recharge l'intégration quand les options changent."""
     await hass.config_entries.async_reload(entry.entry_id)
 
@@ -305,11 +304,10 @@ def _async_register_services(hass: HomeAssistant) -> None:
 
     async def _get_client_and_coords(call: ServiceCall) -> tuple[EasyCareClient, EasyCareCoordinators]:
         """Retourne le client et les coordinators de la première entrée active."""
-        entries = hass.data.get(DOMAIN, {})
+        entries: list[EasyCareConfigEntry] = hass.config_entries.async_loaded_entries(DOMAIN)
         if not entries:
             raise vol.Invalid("No active Easy-care integration")
-        entry_id = next(iter(entries))
-        coords: EasyCareCoordinators = entries[entry_id]
+        coords: EasyCareCoordinators = entries[0].runtime_data
         client = coords.user._client  # noqa: SLF001
         return client, coords
 

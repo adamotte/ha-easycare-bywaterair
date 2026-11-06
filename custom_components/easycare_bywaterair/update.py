@@ -9,11 +9,11 @@ from __future__ import annotations
 from typing import Any
 
 from homeassistant.components.update import UpdateEntity
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, MODULE_TYPE_AC1, MODULE_TYPE_PRESSURE
+from . import EasyCareConfigEntry
+from .const import MODULE_TYPE_AC1, MODULE_TYPE_PRESSURE
 from .coordinator import EasyCareCoordinators, EasyCareModulesCoordinator
 from .entity import EasyCareAC1Entity, EasyCareBPCEntity, EasyCarePressureEntity
 
@@ -36,11 +36,11 @@ def _parse_device_version(data: dict[str, Any], key: str) -> str | None:
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: EasyCareConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Configure les entités update depuis un ConfigEntry."""
-    coordinators: EasyCareCoordinators = hass.data[DOMAIN][entry.entry_id]
+    coordinators: EasyCareCoordinators = entry.runtime_data
     entities: list[UpdateEntity] = []
 
     if coordinators.modules.get_bpc() is not None:
@@ -63,7 +63,7 @@ class EasyCareBPCFirmwareUpdateEntity(
 
     _attr_translation_key = "bpc_firmware"
 
-    def __init__(self, coordinator: EasyCareModulesCoordinator, entry: ConfigEntry) -> None:
+    def __init__(self, coordinator: EasyCareModulesCoordinator, entry: EasyCareConfigEntry) -> None:
         super().__init__(coordinator, entry, unique_id_suffix="bpc_firmware_update")
 
     @property
@@ -100,7 +100,7 @@ class EasyCareAC1FirmwareUpdateEntity(
 
     _attr_translation_key = "ac1_firmware"
 
-    def __init__(self, coordinator: EasyCareModulesCoordinator, entry: ConfigEntry) -> None:
+    def __init__(self, coordinator: EasyCareModulesCoordinator, entry: EasyCareConfigEntry) -> None:
         super().__init__(coordinator, entry, unique_id_suffix="ac1_firmware_update")
 
     @property
@@ -137,7 +137,7 @@ class EasyCareLRPRFirmwareUpdateEntity(
 
     _attr_translation_key = "lrpr_firmware"
 
-    def __init__(self, coordinator: EasyCareModulesCoordinator, entry: ConfigEntry) -> None:
+    def __init__(self, coordinator: EasyCareModulesCoordinator, entry: EasyCareConfigEntry) -> None:
         super().__init__(coordinator, entry, unique_id_suffix="lrpr_firmware_update")
 
     @property

@@ -10,22 +10,21 @@ from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
     BinarySensorEntity,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN
+from . import EasyCareConfigEntry
 from .coordinator import EasyCareCoordinators, EasyCareModulesCoordinator
 from .entity import EasyCareWATBOXEntity
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: EasyCareConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Configure les binary_sensors depuis un ConfigEntry."""
-    coordinators: EasyCareCoordinators = hass.data[DOMAIN][entry.entry_id]
+    coordinators: EasyCareCoordinators = entry.runtime_data
     async_add_entities([
         EasyCareConnectionBinarySensor(coordinators.modules, entry),
     ])
