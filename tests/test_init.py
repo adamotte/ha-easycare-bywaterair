@@ -154,3 +154,46 @@ async def test_service_pump_on_uses_runtime_data(hass, mock_config_entry, mock_c
     mock_client.set_bpc_manual.assert_called_once()
 
 
+async def test_multi_entry_unload_keeps_services_until_last(hass, mock_config_entry, mock_client):
+    """Vérifie que les services restent actifs tant qu'au moins une entrée est chargée."""
+    from unittest.mock import MagicMock, patch
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    from tests.helpers import FAKE_BEARER, MODULE_INIT
+
+    entry1 = await setup_integration(hass, mock_config_entry, mock_client)
+
+    entry2 = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="easycare_pool_2",
+        title="easy·care Piscine 2",
+        data={**mock_config_entry.data, "pool_id": 2},
+    )
+    entry2.add_to_hass(hass)
+
+    mock_auth = MagicMock()
+    mock_auth.bearer = FAKE_BEARER
+
+    with patch(f"{MODULE_INIT}.EasyCareAuth", return_value=mock_auth), \
+         patch(f"{MODULE_INIT}.EasyCareClient", return_value=mock_client):
+        assert await hass.config_entries.async_setup(entry2.entry_id)
+        await hass.async_block_till_done()
+
+    assert hasattr(entry1, "runtime_data")
+    assert hasattr(entry2, "runtime_data")
+    assert hass.services.has_service(DOMAIN, SERVICE_PUMP_ON)
+
+    # Décharge la première entrée : les services doivent rester actifs pour la seconde
+    assert await hass.config_entries.async_unload(entry1.entry_id)
+    await hass.async_block_till_done()
+    assert not hasattr(entry1, "runtime_data")
+    assert hasattr(entry2, "runtime_data")
+    assert hass.services.has_service(DOMAIN, SERVICE_PUMP_ON)
+
+    # Décharge la dernière entrée : les services sont nettoyés
+    assert await hass.config_entries.async_unload(entry2.entry_id)
+    await hass.async_block_till_done()
+    assert not hasattr(entry2, "runtime_data")
+    assert not hass.services.has_service(DOMAIN, SERVICE_PUMP_ON)
+
+
+
