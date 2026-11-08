@@ -151,7 +151,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: EasyCareConfigEntry) ->
     """Décharge une intégration Easy-care."""
     _LOGGER.debug("Unload entry %s", entry.entry_id)
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
-        if not hass.config_entries.async_loaded_entries(DOMAIN):
+        remaining = [
+            e for e in hass.config_entries.async_loaded_entries(DOMAIN)
+            if e.entry_id != entry.entry_id
+        ]
+        if not remaining:
             _async_unregister_services(hass)
     return unload_ok
 
