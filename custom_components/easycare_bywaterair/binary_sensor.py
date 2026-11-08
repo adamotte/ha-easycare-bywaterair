@@ -43,7 +43,7 @@ class EasyCareConnectionBinarySensor(
     _attr_translation_key = "connection"
     _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
 
-    def __init__(self, coordinator: EasyCareModulesCoordinator, entry: ConfigEntry) -> None:
+    def __init__(self, coordinator: EasyCareModulesCoordinator, entry: EasyCareConfigEntry) -> None:
         super().__init__(coordinator, entry, unique_id_suffix="connection")
 
     @property
