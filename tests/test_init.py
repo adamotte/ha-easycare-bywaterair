@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock
 from homeassistant.helpers import device_registry as dr, issue_registry as ir
 
 from custom_components.easycare_bywaterair.api.models import BPCInput, Module, ModuleOutput
+from custom_components.easycare_bywaterair.compat import HAS_ASYNC_GET_DEVICE_BY_IDENTIFIER
 from custom_components.easycare_bywaterair.const import (
     DEVICE_ID_BPC,
     DEVICE_ID_WATBOX,
@@ -25,6 +26,12 @@ def _bpc2(n_inputs: int = 3) -> Module:
     )
 
 
+def _get_device(dev_reg: dr.DeviceRegistry, identifier: tuple[str, str], entry_id: str):
+    if HAS_ASYNC_GET_DEVICE_BY_IDENTIFIER:
+        return dev_reg.async_get_device_by_identifier(identifier, entry_id)
+    return dev_reg.async_get_device(identifiers={identifier})
+
+
 # ---------------------------------------------------------------------------
 # hw_version = type matériel dans le device registry
 # ---------------------------------------------------------------------------
@@ -32,8 +39,8 @@ def _bpc2(n_inputs: int = 3) -> Module:
 async def test_device_hw_version_is_module_type(hass, mock_config_entry, mock_client):
     entry = await setup_integration(hass, mock_config_entry, mock_client)
     dev_reg = dr.async_get(hass)
-    bpc = dev_reg.async_get_device_by_identifier((DOMAIN, f"{entry.entry_id}_{DEVICE_ID_BPC}"), entry.entry_id)
-    watbox = dev_reg.async_get_device_by_identifier((DOMAIN, f"{entry.entry_id}_{DEVICE_ID_WATBOX}"), entry.entry_id)
+    bpc = _get_device(dev_reg, (DOMAIN, f"{entry.entry_id}_{DEVICE_ID_BPC}"), entry.entry_id)
+    watbox = _get_device(dev_reg, (DOMAIN, f"{entry.entry_id}_{DEVICE_ID_WATBOX}"), entry.entry_id)
     assert bpc is not None and bpc.hw_version == "lr-pc"
     assert watbox is not None and watbox.hw_version == "lr-bst-compact"
 
@@ -42,7 +49,7 @@ async def test_device_hw_version_shows_bpc2_type(hass, mock_config_entry, mock_c
     mock_client.get_modules = AsyncMock(return_value=(WATBOX_MODULE, _bpc2()))
     entry = await setup_integration(hass, mock_config_entry, mock_client)
     dev_reg = dr.async_get(hass)
-    bpc = dev_reg.async_get_device_by_identifier((DOMAIN, f"{entry.entry_id}_{DEVICE_ID_BPC}"), entry.entry_id)
+    bpc = _get_device(dev_reg, (DOMAIN, f"{entry.entry_id}_{DEVICE_ID_BPC}"), entry.entry_id)
     assert bpc is not None and bpc.hw_version == "lr-ph"
 
 
