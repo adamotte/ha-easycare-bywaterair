@@ -9,11 +9,10 @@ from __future__ import annotations
 import logging
 
 from homeassistant.components.button import ButtonEntity
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN
+from . import EasyCareConfigEntry
 from .coordinator import EasyCareCoordinators, EasyCareModulesCoordinator
 from .entity import EasyCareWATBOXEntity
 
@@ -22,11 +21,11 @@ _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: EasyCareConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Configure les boutons depuis un ConfigEntry."""
-    coords: EasyCareCoordinators = hass.data[DOMAIN][entry.entry_id]
+    coords: EasyCareCoordinators = entry.runtime_data
     async_add_entities([EasyCareRefreshButton(coords.modules, entry)])
 
 
@@ -39,14 +38,14 @@ class EasyCareRefreshButton(
     _attr_translation_key = "refresh"
     _attr_icon = "mdi:refresh"
 
-    def __init__(self, coordinator: EasyCareModulesCoordinator, entry: ConfigEntry) -> None:
+    def __init__(self, coordinator: EasyCareModulesCoordinator, entry: EasyCareConfigEntry) -> None:
         super().__init__(coordinator, entry, unique_id_suffix="refresh")
 
     async def async_press(self) -> None:
         """Refresh des 3 coordinators en parallèle."""
         import asyncio
 
-        coords: EasyCareCoordinators = self.hass.data[DOMAIN][self._entry.entry_id]
+        coords: EasyCareCoordinators = self._entry.runtime_data
         _LOGGER.info("Manual refresh triggered by the user")
         await asyncio.gather(
             coords.user.async_request_refresh(),

@@ -30,13 +30,13 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 
+from . import EasyCareConfigEntry
 from .const import (
     AUXILIARY_DEFAULT,
     AUXILIARY_ELECTROLYZER,
     AUXILIARY_ESCALIGHT,
     CONF_AUXILIARY_TYPE,
     DEFAULT_DURATION_LIGHT_HOURS,
-    DOMAIN,
 )
 from .coordinator import EasyCareCoordinators, EasyCareModulesCoordinator
 from .entity import EasyCareBPCEntity
@@ -46,11 +46,11 @@ _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: EasyCareConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Configure les entités number depuis un ConfigEntry."""
-    coordinators: EasyCareCoordinators = hass.data[DOMAIN][entry.entry_id]
+    coordinators: EasyCareCoordinators = entry.runtime_data
     bpc = coordinators.modules.get_bpc()
 
     entities: list[NumberEntity] = []
@@ -102,7 +102,7 @@ class EasyCareDurationNumberBase(
     def __init__(
         self,
         coordinator: EasyCareModulesCoordinator,
-        entry: ConfigEntry,
+        entry: EasyCareConfigEntry,
         unique_id_suffix: str,
     ) -> None:
         super().__init__(coordinator, entry, unique_id_suffix)

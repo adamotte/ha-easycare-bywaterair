@@ -19,8 +19,7 @@ async def test_button_refresh_press_triggers_all_coordinators(hass, mock_config_
     entry = await setup_integration(hass, mock_config_entry, mock_client)
     entity_id = get_entity_id(hass, "button", entry.entry_id, "refresh")
 
-    from custom_components.easycare_bywaterair.const import DOMAIN
-    coords = hass.data[DOMAIN][entry.entry_id]
+    coords = entry.runtime_data
 
     with patch.object(coords.user, "async_request_refresh", new_callable=AsyncMock) as mock_user_refresh, \
          patch.object(coords.modules, "async_request_refresh", new_callable=AsyncMock) as mock_modules_refresh, \

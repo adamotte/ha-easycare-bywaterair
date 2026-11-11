@@ -8,14 +8,13 @@ from __future__ import annotations
 import logging
 
 from homeassistant.components.select import SelectEntity
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
+from . import EasyCareConfigEntry
 from .const import (
     ADAPT_OFFSET_MINUS,
     ADAPT_OFFSET_PLUS,
-    DOMAIN,
     HA_BOOST_ACTIVE,
     HA_BOOST_OFF,
     HA_BOOST_OPTIONS,
@@ -38,11 +37,11 @@ _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: EasyCareConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Configure les selects si un BPC est présent."""
-    coords: EasyCareCoordinators = hass.data[DOMAIN][entry.entry_id]
+    coords: EasyCareCoordinators = entry.runtime_data
     if coords.modules.get_bpc() is None:
         return
     # Garde-fou variantes matérielles (issue #10) : voie pompe (index 0) absente
@@ -87,7 +86,7 @@ class EasyCareFiltrationModeSelect(
 
     _optimistic_option: str | None = None
 
-    def __init__(self, coordinator: EasyCareBPCCoordinator, entry: ConfigEntry) -> None:
+    def __init__(self, coordinator: EasyCareBPCCoordinator, entry: EasyCareConfigEntry) -> None:
         super().__init__(coordinator, entry, unique_id_suffix="filtration_mode_select")
 
     def _handle_coordinator_update(self) -> None:
@@ -138,7 +137,7 @@ class EasyCareFiltrationModeSelect(
             _LOGGER.error("Invalid mode requested: %s", option)
             return
 
-        coords: EasyCareCoordinators = self.hass.data[DOMAIN][self._entry.entry_id]
+        coords: EasyCareCoordinators = self._entry.runtime_data
         client = coords.user._client  # noqa: SLF001
 
         _LOGGER.info("Filtration mode change → %s (%s)", option, api_option)
@@ -168,7 +167,7 @@ class EasyCareBoostSelect(EasyCareBPCEntity[EasyCareBPCCoordinator], SelectEntit
 
     _optimistic_option: str | None = None
 
-    def __init__(self, coordinator: EasyCareBPCCoordinator, entry: ConfigEntry) -> None:
+    def __init__(self, coordinator: EasyCareBPCCoordinator, entry: EasyCareConfigEntry) -> None:
         super().__init__(coordinator, entry, unique_id_suffix="boost_select")
 
     def _handle_coordinator_update(self) -> None:
@@ -219,7 +218,7 @@ class EasyCareBoostSelect(EasyCareBPCEntity[EasyCareBPCCoordinator], SelectEntit
 
     async def async_select_option(self, option: str) -> None:
         """Démarre un boost ou l'annule."""
-        coords: EasyCareCoordinators = self.hass.data[DOMAIN][self._entry.entry_id]
+        coords: EasyCareCoordinators = self._entry.runtime_data
         client = coords.user._client  # noqa: SLF001
 
         if option in (HA_BOOST_OFF, HA_BOOST_ACTIVE):

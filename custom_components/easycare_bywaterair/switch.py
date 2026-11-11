@@ -23,17 +23,16 @@ import logging
 from typing import Any
 
 from homeassistant.components.switch import SwitchEntity
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
+from . import EasyCareConfigEntry
 from .const import (
     AUXILIARY_DEFAULT,
     AUXILIARY_ELECTROLYZER,
     BPC_INDEX_ESCALIGHT,
     CONF_AUXILIARY_TYPE,
     DEFAULT_DURATION_LIGHT_HOURS,
-    DOMAIN,
 )
 from .coordinator import EasyCareBPCCoordinator, EasyCareCoordinators
 from .entity import EasyCareBPCEntity
@@ -43,7 +42,7 @@ _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: EasyCareConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Configure les switchs BPC depuis un ConfigEntry.
@@ -51,7 +50,7 @@ async def async_setup_entry(
     L'électrolyseur est créé si le BPC a au moins 2 voies (index 2) et que
     l'utilisateur a déclaré le type de la voie comme « electrolyzer ».
     """
-    coordinators: EasyCareCoordinators = hass.data[DOMAIN][entry.entry_id]
+    coordinators: EasyCareCoordinators = entry.runtime_data
     bpc = coordinators.modules.get_bpc()
 
     entities: list[SwitchEntity] = []
@@ -96,7 +95,7 @@ class EasyCareElectrolyzerSwitch(EasyCareBPCEntity[EasyCareBPCCoordinator], Swit
 
     _optimistic_is_on: bool | None = None
 
-    def __init__(self, coordinator: EasyCareBPCCoordinator, entry: ConfigEntry) -> None:
+    def __init__(self, coordinator: EasyCareBPCCoordinator, entry: EasyCareConfigEntry) -> None:
         super().__init__(coordinator, entry, unique_id_suffix="electrolyzer")
 
     @property
@@ -149,7 +148,7 @@ class EasyCareElectrolyzerSwitch(EasyCareBPCEntity[EasyCareBPCCoordinator], Swit
             self._bpc_index, duration_minutes,
         )
 
-        coordinators: EasyCareCoordinators = self.hass.data[DOMAIN][self._entry.entry_id]
+        coordinators: EasyCareCoordinators = self._entry.runtime_data
         watbox = coordinators.modules.get_watbox()
         bpc = coordinators.modules.get_bpc()
         if watbox is None or bpc is None:
@@ -171,7 +170,7 @@ class EasyCareElectrolyzerSwitch(EasyCareBPCEntity[EasyCareBPCCoordinator], Swit
         """Éteint l'électrolyseur via la commande BPC manual."""
         _LOGGER.info("Turning off BPC channel %d (electrolyzer)", self._bpc_index)
 
-        coordinators: EasyCareCoordinators = self.hass.data[DOMAIN][self._entry.entry_id]
+        coordinators: EasyCareCoordinators = self._entry.runtime_data
         watbox = coordinators.modules.get_watbox()
         bpc = coordinators.modules.get_bpc()
         if watbox is None or bpc is None:
