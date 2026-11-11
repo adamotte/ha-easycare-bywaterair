@@ -18,10 +18,10 @@ import logging
 from typing import Any
 
 from homeassistant.components.light import ColorMode, LightEntity
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
+from . import EasyCareConfigEntry
 from .const import (
     AUXILIARY_DEFAULT,
     AUXILIARY_ESCALIGHT,
@@ -29,7 +29,6 @@ from .const import (
     BPC_INDEX_SPOT,
     CONF_AUXILIARY_TYPE,
     DEFAULT_DURATION_LIGHT_HOURS,
-    DOMAIN,
 )
 from .coordinator import EasyCareBPCCoordinator, EasyCareCoordinators
 from .entity import EasyCareBPCEntity
@@ -39,7 +38,7 @@ _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: EasyCareConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Configure les lumières BPC depuis un ConfigEntry.
@@ -50,7 +49,7 @@ async def async_setup_entry(
     est déclarée électrolyseur (ou désactivée), aucune lumière n'est créée pour
     elle — voir switch.py.
     """
-    coordinators: EasyCareCoordinators = hass.data[DOMAIN][entry.entry_id]
+    coordinators: EasyCareCoordinators = entry.runtime_data
     bpc = coordinators.modules.get_bpc()
 
     entities: list[LightEntity] = []
@@ -163,7 +162,7 @@ class EasyCareBPCLight(EasyCareBPCEntity[EasyCareBPCCoordinator], LightEntity):
 
         _LOGGER.info("Turning on BPC channel %d for %d minutes", self._bpc_index, duration_minutes)
 
-        coordinators: EasyCareCoordinators = self.hass.data[DOMAIN][self._entry.entry_id]
+        coordinators: EasyCareCoordinators = self._entry.runtime_data
         watbox = coordinators.modules.get_watbox()
         bpc = coordinators.modules.get_bpc()
         if watbox is None or bpc is None:
@@ -188,7 +187,7 @@ class EasyCareBPCLight(EasyCareBPCEntity[EasyCareBPCCoordinator], LightEntity):
         """Éteint la lumière via la commande BPC manual."""
         _LOGGER.info("Turning off BPC channel %d", self._bpc_index)
 
-        coordinators: EasyCareCoordinators = self.hass.data[DOMAIN][self._entry.entry_id]
+        coordinators: EasyCareCoordinators = self._entry.runtime_data
         watbox = coordinators.modules.get_watbox()
         bpc = coordinators.modules.get_bpc()
         if watbox is None or bpc is None:
@@ -230,7 +229,7 @@ class EasyCareSpotLight(EasyCareBPCLight):
     _attr_translation_key = "spot"
     _attr_icon = "mdi:lightbulb"
 
-    def __init__(self, coordinator: EasyCareBPCCoordinator, entry: ConfigEntry) -> None:
+    def __init__(self, coordinator: EasyCareBPCCoordinator, entry: EasyCareConfigEntry) -> None:
         super().__init__(coordinator, entry, unique_id_suffix="spot")
 
 
@@ -241,5 +240,5 @@ class EasyCareEscalightLight(EasyCareBPCLight):
     _attr_translation_key = "escalight"
     _attr_icon = "mdi:stairs"
 
-    def __init__(self, coordinator: EasyCareBPCCoordinator, entry: ConfigEntry) -> None:
+    def __init__(self, coordinator: EasyCareBPCCoordinator, entry: EasyCareConfigEntry) -> None:
         super().__init__(coordinator, entry, unique_id_suffix="escalight")

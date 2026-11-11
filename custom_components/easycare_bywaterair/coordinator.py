@@ -687,7 +687,7 @@ class EasyCareBPCCoordinator(DataUpdateCoordinator[BPCData]):
 class EasyCareCoordinators:
     """Agrégat des 3 coordinators d'une intégration.
 
-    Stocké dans `hass.data[DOMAIN][entry.entry_id]`.
+    Stocké dans `entry.runtime_data`.
     """
 
     user: EasyCareUserCoordinator

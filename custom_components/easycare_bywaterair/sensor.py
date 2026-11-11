@@ -64,7 +64,6 @@ from .const import (
     CONF_PUMP_REPLACEMENT_DATE,
     CONF_PUMP_REPLACEMENT_PREVIOUS_POWER_W,
     CONF_PUMP_REPLACEMENT_RUNTIME_H,
-    DOMAIN,
     HA_MODE_AUTO,
     HA_MODE_AUTO_MINUS,
     HA_MODE_AUTO_PLUS,
@@ -75,6 +74,7 @@ from .const import (
     MODULE_TYPE_AC1,
     MODULE_TYPE_PRESSURE,
 )
+from . import EasyCareConfigEntry
 from .coordinator import (
     EasyCareBPCCoordinator,
     EasyCareCoordinators,
@@ -130,11 +130,11 @@ _NOTIFICATION_ACTION_TO_KEY: dict[str, str] = {
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: EasyCareConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Configure tous les sensors depuis un ConfigEntry."""
-    coords: EasyCareCoordinators = hass.data[DOMAIN][entry.entry_id]
+    coords: EasyCareCoordinators = entry.runtime_data
 
     sensors: list[SensorEntity] = []
 
